@@ -125,6 +125,14 @@ body {
   pointer-events: none;
 }
 
+.grid-line {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: #e5e7eb;
+  pointer-events: none;
+}
+
 /* ==== Section: Modal ==== */
 .modal-overlay {
   position: fixed;
@@ -209,6 +217,22 @@ body {
     <div class="modal-actions">
       <button id="btn-cancel-edit-project">キャンセル</button>
       <button id="btn-save-edit-project">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="schedule-add-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>スケジュール追加</h2>
+    <label for="schedule-add-title">作業内容</label>
+    <input id="schedule-add-title" type="text">
+    <label for="schedule-add-start-date">開始日</label>
+    <input id="schedule-add-start-date" type="date">
+    <label for="schedule-add-end-date">終了日</label>
+    <input id="schedule-add-end-date" type="date">
+    <div class="modal-actions">
+      <button id="btn-cancel-add-schedule">キャンセル</button>
+      <button id="btn-confirm-add-schedule">追加</button>
     </div>
   </div>
 </div>
@@ -492,6 +516,29 @@ body {
     document.getElementById("project-edit-modal").hidden = true;
   }
 
+  /* ---- Sub-section: Schedule Add Modal ---- */
+
+  /**
+   * スケジュール追加モーダルを、入力欄を空にした状態で開く
+   */
+  function openScheduleAddModal() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    document.getElementById("schedule-add-title").value = "";
+    document.getElementById("schedule-add-start-date").value = "";
+    document.getElementById("schedule-add-end-date").value = "";
+    document.getElementById("schedule-add-modal").hidden = false;
+  }
+
+  /**
+   * スケジュール追加モーダルを閉じる
+   */
+  function closeScheduleAddModal() {
+    document.getElementById("schedule-add-modal").hidden = true;
+  }
+
   /* ---- Sub-section: Schedule Table ---- */
 
   /**
@@ -553,6 +600,18 @@ body {
    */
   function parseDateStr(dateStr) {
     return new Date(dateStr + "T00:00:00");
+  }
+
+  /**
+   * YYYY-MM-DD形式の、実在する日付の文字列かどうかを判定する
+   * @param {string} dateStr
+   * @returns {boolean}
+   */
+  function isValidDateStr(dateStr) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return false;
+    }
+    return !isNaN(parseDateStr(dateStr).getTime());
   }
 
   /**
@@ -623,10 +682,13 @@ body {
 
     const dayWidthPx = PERIOD_DAY_WIDTH_PX[currentPeriod];
     const today = getToday();
+    const twoYearsAhead = new Date(today);
+    twoYearsAhead.setFullYear(twoYearsAhead.getFullYear() + 2);
+
     const startDates = items.map((item) => parseDateStr(item.startDate));
     const endDates = items.map((item) => parseDateStr(item.endDate));
     const rangeStart = new Date(Math.min.apply(null, startDates.concat([today])));
-    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today])));
+    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today, twoYearsAhead])));
     const totalDays = diffInDays(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * dayWidthPx;
     const headerHeightPx = 20;
@@ -634,15 +696,21 @@ body {
     const totalHeight = headerHeightPx + items.length * rowHeightPx;
 
     const headerCells = [];
+    const gridLines = [];
     for (let i = 0; i < totalDays; i++) {
       const cellDate = new Date(rangeStart);
       cellDate.setDate(cellDate.getDate() + i);
-      const label = shouldShowDateLabel(cellDate, i) ? formatDateLabel(cellDate) : "";
+      const showLabel = shouldShowDateLabel(cellDate, i);
       headerCells.push(
         "<div class=\"gantt-header-cell\" style=\"width:" + dayWidthPx + "px\">" +
-        label +
+        (showLabel ? formatDateLabel(cellDate) : "") +
         "</div>"
       );
+      if (showLabel) {
+        gridLines.push(
+          "<div class=\"grid-line\" style=\"left:" + (i * dayWidthPx) + "px; height:" + totalHeight + "px\"></div>"
+        );
+      }
     }
 
     const rows = items
@@ -668,6 +736,7 @@ body {
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
       "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
+      gridLines.join("") +
       rows +
       todayLine +
       "</div>";
@@ -732,17 +801,31 @@ body {
       await renderMainArea();
     });
 
-    document.getElementById("btn-add-schedule").addEventListener("click", async () => {
-      if (currentProjectId === null) {
-        window.alert("先にプロジェクトを作成・選択してください");
+    document.getElementById("btn-add-schedule").addEventListener("click", () => {
+      openScheduleAddModal();
+    });
+
+    document.getElementById("btn-cancel-add-schedule").addEventListener("click", () => {
+      closeScheduleAddModal();
+    });
+
+    document.getElementById("btn-confirm-add-schedule").addEventListener("click", async () => {
+      const title = document.getElementById("schedule-add-title").value.trim();
+      const startDate = document.getElementById("schedule-add-start-date").value;
+      const endDate = document.getElementById("schedule-add-end-date").value;
+
+      if (!title) {
+        window.alert("作業内容を入力してください");
         return;
       }
-      const title = window.prompt("作業内容を入力してください");
-      if (!title) return;
-      const startDate = window.prompt("開始日を入力してください (YYYY-MM-DD)");
-      if (!startDate) return;
-      const endDate = window.prompt("終了日を入力してください (YYYY-MM-DD)");
-      if (!endDate) return;
+      if (!isValidDateStr(startDate)) {
+        window.alert("開始日を選択してください");
+        return;
+      }
+      if (!isValidDateStr(endDate)) {
+        window.alert("終了日を選択してください");
+        return;
+      }
 
       await addScheduleItem({
         projectId: currentProjectId,
@@ -750,6 +833,7 @@ body {
         startDate: startDate,
         endDate: endDate,
       });
+      closeScheduleAddModal();
       await renderMainArea();
     });
 
