@@ -41,7 +41,10 @@ Webアプリケーション（GantForge）を、AI駆動開発（Claude / Claude
 
 # 5.Git運用
 
+- ブランチ構成: `main`の直下に`develop`ブランチを置く。各作業は`develop`から切った作業ブランチ（`feature/<フェーズ番号>-<内容>`、例: `feature/1-c-gantt-chart`）で行う
+- 新しい作業に着手する際は、`develop`から作業ブランチを作成してから実装する
 - ローカルコミット・GitHubへのpushは、必ず事前にユーザーに確認を取ってから実行する。無断でcommit/pushしない
+- プルリクエスト(PR)の作成・マージは行わない。commit・push（作業ブランチ→develop、developが溜まったらdevelop→mainのPR含む）はすべてユーザーがGitHub上で手動で行う
 
 ---
 
