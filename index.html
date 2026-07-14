@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GantForge</title>
+<style>
+/* ==== Section: Base Layout ==== */
+:root {
+  font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #1f2937;
+  color: #fff;
+}
+
+.app-header select,
+.app-header button {
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+/* ==== Section: Toolbar ==== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.toolbar button {
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+/* ==== Section: Main Area / Schedule Table ==== */
+.main-area {
+  display: flex;
+}
+
+.schedule-table {
+  flex: 1;
+  padding: 12px;
+}
+
+.schedule-table table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #d1d5db;
+  padding: 4px 8px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.gantt-chart {
+  flex: 1;
+  padding: 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <label for="project-select">プロジェクト:</label>
+  <select id="project-select"></select>
+  <button id="btn-new-project">新規プロジェクト作成</button>
+  <button id="btn-delete-project">プロジェクト削除</button>
+</header>
+
+<div class="toolbar">
+  <button id="btn-add-schedule">スケジュール追加</button>
+</div>
+
+<main class="main-area">
+  <section id="schedule-table-container" class="schedule-table"></section>
+  <section id="gantt-chart-container" class="gantt-chart">(ガントチャートは1-Cで実装予定)</section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ==== Section: 初期化 ==== */
+  const DB_NAME = "GantForgeDB";
+  const DB_VERSION = 1;
+  const STORE_PROJECTS = "projects";
+  const STORE_SCHEDULE_ITEMS = "scheduleItems";
+  const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
+
+  const STATUS_NOT_STARTED = "未着手";
+
+  let db = null;
+  let currentProjectId = null;
+
+  document.addEventListener("DOMContentLoaded", init);
+
+  async function init() {
+    db = await openDatabase();
+    await refreshProjectSelect();
+    await renderScheduleTable();
+    bindEvents();
+  }
+
+  /* ==== Section: データ層(IndexedDB) ==== */
+
+  /**
+   * IndexedDBを開き、初回はオブジェクトストアを作成する
+   * @returns {Promise<IDBDatabase>}
+   */
+  function openDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const database = event.target.result;
+
+        if (!database.objectStoreNames.contains(STORE_PROJECTS)) {
+          database.createObjectStore(STORE_PROJECTS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_SCHEDULE_ITEMS)) {
+          const scheduleStore = database.createObjectStore(STORE_SCHEDULE_ITEMS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          scheduleStore.createIndex(INDEX_SCHEDULE_ITEMS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+      };
+
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /* ---- Sub-section: Projects ---- */
+
+  /**
+   * プロジェクトを新規追加する
+   * @param {string} name - プロジェクト名
+   * @returns {Promise<number>} 追加されたプロジェクトのid
+   */
+  function addProject(name) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readwrite");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const now = Date.now();
+      const request = store.add({
+        name: name,
+        description: "",
+        createdAt: now,
+        updatedAt: now,
+        locked: false,
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 全プロジェクトを取得する
+   * @returns {Promise<Array<Object>>}
+   */
+  function getAllProjects() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readonly");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const request = store.getAll();
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * プロジェクトを削除する
+   * @param {number} id - 削除対象のプロジェクトid
+   * @returns {Promise<void>}
+   */
+  function deleteProject(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readwrite");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /* ---- Sub-section: Schedule Items ---- */
+
+  /**
+   * スケジュール項目を新規追加する
+   * @param {Object} item
+   * @param {number} item.projectId - 紐づくプロジェクトのid
+   * @param {string} item.title - 作業内容
+   * @param {string} item.startDate - 開始日(YYYY-MM-DD)
+   * @param {string} item.endDate - 終了日(YYYY-MM-DD)
+   * @returns {Promise<number>} 追加されたスケジュール項目のid
+   */
+  function addScheduleItem(item) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const request = store.add({
+        projectId: item.projectId,
+        title: item.title,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        status: STATUS_NOT_STARTED,
+        order: Date.now(),
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトのスケジュール項目を、登録順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getScheduleItemsByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readonly");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const index = store.index(INDEX_SCHEDULE_ITEMS_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const items = event.target.result;
+        items.sort((a, b) => a.order - b.order);
+        resolve(items);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /* ==== Section: UI描画 ==== */
+
+  /* ---- Sub-section: Projects ---- */
+
+  /**
+   * プロジェクト選択ドロップダウンを最新の状態に描画し直す
+   * @returns {Promise<void>}
+   */
+  async function refreshProjectSelect() {
+    const projects = await getAllProjects();
+    const select = document.getElementById("project-select");
+    select.innerHTML = "";
+
+    if (projects.length === 0) {
+      const option = document.createElement("option");
+      option.textContent = "(プロジェクトがありません)";
+      option.value = "";
+      select.appendChild(option);
+      currentProjectId = null;
+      return;
+    }
+
+    for (const project of projects) {
+      const option = document.createElement("option");
+      option.value = String(project.id);
+      option.textContent = project.name;
+      select.appendChild(option);
+    }
+
+    const stillExists = projects.some((p) => p.id === currentProjectId);
+    currentProjectId = stillExists ? currentProjectId : projects[0].id;
+    select.value = String(currentProjectId);
+  }
+
+  /* ---- Sub-section: Schedule Table ---- */
+
+  /**
+   * 選択中プロジェクトのスケジュール表を描画し直す
+   * @returns {Promise<void>}
+   */
+  async function renderScheduleTable() {
+    const container = document.getElementById("schedule-table-container");
+
+    if (currentProjectId === null) {
+      container.innerHTML = "<p>プロジェクトを選択・作成してください</p>";
+      return;
+    }
+
+    const items = await getScheduleItemsByProject(currentProjectId);
+
+    if (items.length === 0) {
+      container.innerHTML = "<p>スケジュール項目がありません</p>";
+      return;
+    }
+
+    const rows = items
+      .map((item) => {
+        return (
+          "<tr>" +
+          "<td>" + escapeHtml(item.title) + "</td>" +
+          "<td>" + escapeHtml(item.startDate) + "</td>" +
+          "<td>" + escapeHtml(item.endDate) + "</td>" +
+          "<td>" + escapeHtml(item.status) + "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+
+    container.innerHTML =
+      "<table>" +
+      "<thead><tr><th>作業内容</th><th>開始</th><th>終了</th><th>状態</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody>" +
+      "</table>";
+  }
+
+  /**
+   * HTMLエスケープする
+   * @param {string} value
+   * @returns {string}
+   */
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.textContent = value;
+    return div.innerHTML;
+  }
+
+  /* ==== Section: イベントハンドラ ==== */
+
+  function bindEvents() {
+    document.getElementById("project-select").addEventListener("change", async (event) => {
+      currentProjectId = event.target.value ? Number(event.target.value) : null;
+      await renderScheduleTable();
+    });
+
+    document.getElementById("btn-new-project").addEventListener("click", async () => {
+      const name = window.prompt("プロジェクト名を入力してください");
+      if (!name) return;
+      const newId = await addProject(name);
+      currentProjectId = newId;
+      await refreshProjectSelect();
+      await renderScheduleTable();
+    });
+
+    document.getElementById("btn-delete-project").addEventListener("click", async () => {
+      if (currentProjectId === null) return;
+      const ok = window.confirm("選択中のプロジェクトを削除しますか？");
+      if (!ok) return;
+      await deleteProject(currentProjectId);
+      currentProjectId = null;
+      await refreshProjectSelect();
+      await renderScheduleTable();
+    });
+
+    document.getElementById("btn-add-schedule").addEventListener("click", async () => {
+      if (currentProjectId === null) {
+        window.alert("先にプロジェクトを作成・選択してください");
+        return;
+      }
+      const title = window.prompt("作業内容を入力してください");
+      if (!title) return;
+      const startDate = window.prompt("開始日を入力してください (YYYY-MM-DD)");
+      if (!startDate) return;
+      const endDate = window.prompt("終了日を入力してください (YYYY-MM-DD)");
+      if (!endDate) return;
+
+      await addScheduleItem({
+        projectId: currentProjectId,
+        title: title,
+        startDate: startDate,
+        endDate: endDate,
+      });
+      await renderScheduleTable();
+    });
+  }
+})();
+</script>
+</body>
+</html>
