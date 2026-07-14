@@ -564,6 +564,18 @@ body {
   }
 
   /**
+   * YYYY-MM-DD形式の、実在する日付の文字列かどうかを判定する
+   * @param {string} dateStr
+   * @returns {boolean}
+   */
+  function isValidDateStr(dateStr) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return false;
+    }
+    return !isNaN(parseDateStr(dateStr).getTime());
+  }
+
+  /**
    * 2つの日付の差を日数で返す（b - a）
    * @param {Date} a
    * @param {Date} b
@@ -631,10 +643,13 @@ body {
 
     const dayWidthPx = PERIOD_DAY_WIDTH_PX[currentPeriod];
     const today = getToday();
+    const twoYearsAhead = new Date(today);
+    twoYearsAhead.setFullYear(twoYearsAhead.getFullYear() + 2);
+
     const startDates = items.map((item) => parseDateStr(item.startDate));
     const endDates = items.map((item) => parseDateStr(item.endDate));
     const rangeStart = new Date(Math.min.apply(null, startDates.concat([today])));
-    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today])));
+    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today, twoYearsAhead])));
     const totalDays = diffInDays(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * dayWidthPx;
     const headerHeightPx = 20;
@@ -754,10 +769,20 @@ body {
       }
       const title = window.prompt("作業内容を入力してください");
       if (!title) return;
+
       const startDate = window.prompt("開始日を入力してください (YYYY-MM-DD)");
       if (!startDate) return;
+      if (!isValidDateStr(startDate)) {
+        window.alert("開始日の形式が正しくありません。YYYY-MM-DD形式で、実在する日付を入力してください");
+        return;
+      }
+
       const endDate = window.prompt("終了日を入力してください (YYYY-MM-DD)");
       if (!endDate) return;
+      if (!isValidDateStr(endDate)) {
+        window.alert("終了日の形式が正しくありません。YYYY-MM-DD形式で、実在する日付を入力してください");
+        return;
+      }
 
       await addScheduleItem({
         projectId: currentProjectId,
