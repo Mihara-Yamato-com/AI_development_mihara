@@ -77,20 +77,24 @@ body {
 
 /* ==== Section: Gantt Chart Rendering ==== */
 .gantt-scroll {
+  position: relative;
   display: inline-block;
 }
 
 .gantt-header {
   display: flex;
+  height: 20px;
   border-bottom: 1px solid #d1d5db;
 }
 
 .gantt-header-cell {
   flex: 0 0 auto;
+  font-size: 11px;
   text-align: center;
   border-right: 1px solid #e5e7eb;
   padding: 2px 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .gantt-row {
@@ -105,11 +109,20 @@ body {
   height: 20px;
   background: #3b82f6;
   color: #fff;
+  font-size: 12px;
   border-radius: 3px;
   padding: 0 4px;
   white-space: nowrap;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.today-line {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  background: #ef4444;
+  pointer-events: none;
 }
 </style>
 </head>
@@ -123,6 +136,14 @@ body {
 
 <div class="toolbar">
   <button id="btn-add-schedule">スケジュール追加</button>
+  <label for="period-select">表示単位:</label>
+  <select id="period-select">
+    <option value="day">日</option>
+    <option value="week">週</option>
+    <option value="month">月</option>
+    <option value="quarter">3ヶ月</option>
+  </select>
+  <button id="btn-today">今日</button>
 </div>
 
 <main class="main-area">
@@ -142,10 +163,17 @@ body {
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
-  const DAY_WIDTH_PX = 24;
+
+  const PERIOD_DAY_WIDTH_PX = {
+    day: 24,
+    week: 10,
+    month: 5,
+    quarter: 3,
+  };
 
   let db = null;
   let currentProjectId = null;
+  let currentPeriod = "day";
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -419,8 +447,35 @@ body {
   }
 
   /**
+   * 今日の0時のDateを返す
+   * @returns {Date}
+   */
+  function getToday() {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+
+  /**
+   * 現在の表示単位(currentPeriod)に応じて、そのヘッダーセルにラベルを表示するか判定する
+   * @param {Date} cellDate
+   * @param {number} index - 表示範囲の先頭からの日数(0始まり)
+   * @returns {boolean}
+   */
+  function shouldShowDateLabel(cellDate, index) {
+    if (currentPeriod === "day") {
+      return true;
+    }
+    if (currentPeriod === "week") {
+      return index === 0 || cellDate.getDay() === 1; // 月曜日
+    }
+    // month / quarter
+    return index === 0 || cellDate.getDate() === 1;
+  }
+
+  /**
    * 選択中プロジェクトのガントチャートを描画し直す
-   * 表示範囲は、全スケジュール項目の最も早い開始日〜最も遅い終了日を1日単位で並べたもの
+   * 表示範囲は、全スケジュール項目の最も早い開始日〜最も遅い終了日に「今日」も含めた範囲を1日単位で並べたもの
    * @returns {Promise<void>}
    */
   async function renderGanttChart() {
@@ -438,20 +493,26 @@ body {
       return;
     }
 
+    const dayWidthPx = PERIOD_DAY_WIDTH_PX[currentPeriod];
+    const today = getToday();
     const startDates = items.map((item) => parseDateStr(item.startDate));
     const endDates = items.map((item) => parseDateStr(item.endDate));
-    const rangeStart = new Date(Math.min.apply(null, startDates));
-    const rangeEnd = new Date(Math.max.apply(null, endDates));
+    const rangeStart = new Date(Math.min.apply(null, startDates.concat([today])));
+    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today])));
     const totalDays = diffInDays(rangeStart, rangeEnd) + 1;
-    const totalWidth = totalDays * DAY_WIDTH_PX;
+    const totalWidth = totalDays * dayWidthPx;
+    const headerHeightPx = 20;
+    const rowHeightPx = 28;
+    const totalHeight = headerHeightPx + items.length * rowHeightPx;
 
     const headerCells = [];
     for (let i = 0; i < totalDays; i++) {
       const cellDate = new Date(rangeStart);
       cellDate.setDate(cellDate.getDate() + i);
+      const label = shouldShowDateLabel(cellDate, i) ? formatDateLabel(cellDate) : "";
       headerCells.push(
-        "<div class=\"gantt-header-cell\" style=\"width:" + DAY_WIDTH_PX + "px\">" +
-        formatDateLabel(cellDate) +
+        "<div class=\"gantt-header-cell\" style=\"width:" + dayWidthPx + "px\">" +
+        label +
         "</div>"
       );
     }
@@ -460,8 +521,8 @@ body {
       .map((item) => {
         const itemStart = parseDateStr(item.startDate);
         const itemEnd = parseDateStr(item.endDate);
-        const left = diffInDays(rangeStart, itemStart) * DAY_WIDTH_PX;
-        const width = (diffInDays(itemStart, itemEnd) + 1) * DAY_WIDTH_PX;
+        const left = diffInDays(rangeStart, itemStart) * dayWidthPx;
+        const width = (diffInDays(itemStart, itemEnd) + 1) * dayWidthPx;
         return (
           "<div class=\"gantt-row\" style=\"width:" + totalWidth + "px\">" +
           "<div class=\"gantt-bar\" style=\"left:" + left + "px; width:" + width + "px\">" +
@@ -472,11 +533,28 @@ body {
       })
       .join("");
 
+    const todayLeft = diffInDays(rangeStart, today) * dayWidthPx;
+    const todayLine =
+      "<div class=\"today-line\" style=\"left:" + todayLeft + "px; height:" + totalHeight + "px\"></div>";
+
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
       "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
       rows +
+      todayLine +
       "</div>";
+  }
+
+  /**
+   * ガントチャートを、今日の日付が中央に来るようスクロールする
+   */
+  function scrollGanttToToday() {
+    const container = document.getElementById("gantt-chart-container");
+    const todayLine = container.querySelector(".today-line");
+    if (!todayLine) return;
+
+    const todayLeft = parseInt(todayLine.style.left, 10);
+    container.scrollLeft = Math.max(0, todayLeft - container.clientWidth / 2);
   }
 
   /* ==== Section: イベントハンドラ ==== */
@@ -525,6 +603,16 @@ body {
         endDate: endDate,
       });
       await renderMainArea();
+    });
+
+    document.getElementById("period-select").addEventListener("change", async (event) => {
+      currentPeriod = event.target.value;
+      await renderGanttChart();
+    });
+
+    document.getElementById("btn-today").addEventListener("click", async () => {
+      await renderGanttChart();
+      scrollGanttToToday();
     });
   }
 })();
