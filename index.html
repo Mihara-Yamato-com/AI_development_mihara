@@ -221,6 +221,23 @@ body {
 .milestone-list-item button {
   font-size: 12px;
 }
+
+/* ==== Section: Lock ==== */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-box input:disabled,
+.modal-box textarea:disabled {
+  background: #e5e7eb;
+  cursor: not-allowed;
+}
+
+#btn-toggle-lock.is-locked {
+  background: #b91c1c;
+  color: #fff;
+}
 </style>
 </head>
 <body>
@@ -231,6 +248,7 @@ body {
   <button id="btn-delete-project">プロジェクト削除</button>
   <button id="btn-edit-project">編集</button>
   <button id="btn-milestones">マイルストーン</button>
+  <button id="btn-toggle-lock">ロック</button>
 </header>
 
 <div class="toolbar">
@@ -244,6 +262,10 @@ body {
   </select>
   <button id="btn-today">今日</button>
   <button id="btn-expand-all">全て開く</button>
+  <span>表示列:</span>
+  <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
+  <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
+  <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
 </div>
 
 <main class="main-area">
@@ -323,6 +345,8 @@ body {
   let db = null;
   let currentProjectId = null;
   let currentPeriod = "day";
+  let currentProjectLocked = false;
+  let visibleColumns = { startDate: true, endDate: true, status: true };
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -475,6 +499,29 @@ body {
         project.name = changes.name;
         project.description = changes.description;
         project.updatedAt = Date.now();
+        const putRequest = store.put(project);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * プロジェクトのロック状態を更新する
+   * @param {number} id
+   * @param {boolean} locked
+   * @returns {Promise<void>}
+   */
+  function setProjectLocked(id, locked) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readwrite");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const project = getRequest.result;
+        project.locked = locked;
         const putRequest = store.put(project);
         putRequest.onsuccess = () => resolve();
         putRequest.onerror = (event) => reject(event.target.error);
@@ -654,6 +701,8 @@ body {
       option.value = "";
       select.appendChild(option);
       currentProjectId = null;
+      currentProjectLocked = false;
+      renderLockUI();
       return;
     }
 
@@ -667,6 +716,27 @@ body {
     const stillExists = projects.some((p) => p.id === currentProjectId);
     currentProjectId = stillExists ? currentProjectId : projects[0].id;
     select.value = String(currentProjectId);
+
+    const currentProject = projects.find((p) => p.id === currentProjectId);
+    currentProjectLocked = Boolean(currentProject && currentProject.locked);
+    renderLockUI();
+  }
+
+  /* ---- Sub-section: Lock ---- */
+
+  /**
+   * currentProjectLockedに応じて、ロックボタンの表示と、
+   * ロック中は操作不可にすべきボタン・入力欄のdisabled状態を更新する
+   */
+  function renderLockUI() {
+    const lockButton = document.getElementById("btn-toggle-lock");
+    lockButton.textContent = currentProjectLocked ? "ロック解除" : "ロック";
+    lockButton.disabled = currentProjectId === null;
+    lockButton.classList.toggle("is-locked", currentProjectLocked);
+
+    ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label"].forEach((id) => {
+      document.getElementById(id).disabled = currentProjectLocked;
+    });
   }
 
   /* ---- Sub-section: Project Edit Modal ---- */
@@ -817,7 +887,7 @@ body {
         return (
           "<div class=\"milestone-list-item\">" +
           "<span>" + escapeHtml(milestone.date) + " " + escapeHtml(milestone.label) + "</span>" +
-          "<button data-delete-milestone-id=\"" + milestone.id + "\">削除</button>" +
+          "<button data-delete-milestone-id=\"" + milestone.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
           "</div>"
         );
       })
@@ -847,6 +917,12 @@ body {
 
     const visibleList = buildVisibleScheduleList(items);
 
+    const headerCells =
+      "<th>作業内容</th>" +
+      (visibleColumns.startDate ? "<th>開始</th>" : "") +
+      (visibleColumns.endDate ? "<th>終了</th>" : "") +
+      (visibleColumns.status ? "<th>状態</th>" : "");
+
     const rows = visibleList
       .map((entry) => {
         const item = entry.item;
@@ -856,12 +932,13 @@ body {
             "</span>"
           : "<span class=\"toggle-spacer\"></span>";
         const indentPx = entry.depth * 16 + 4;
+        const startCell = visibleColumns.startDate ? "<td>" + escapeHtml(item.startDate) + "</td>" : "";
+        const endCell = visibleColumns.endDate ? "<td>" + escapeHtml(item.endDate) + "</td>" : "";
+        const statusCell = visibleColumns.status ? "<td>" + escapeHtml(item.status) + "</td>" : "";
         return (
           "<tr>" +
           "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
-          "<td>" + escapeHtml(item.startDate) + "</td>" +
-          "<td>" + escapeHtml(item.endDate) + "</td>" +
-          "<td>" + escapeHtml(item.status) + "</td>" +
+          startCell + endCell + statusCell +
           "</tr>"
         );
       })
@@ -869,7 +946,7 @@ body {
 
     container.innerHTML =
       "<table>" +
-      "<thead><tr><th>作業内容</th><th>開始</th><th>終了</th><th>状態</th></tr></thead>" +
+      "<thead><tr>" + headerCells + "</tr></thead>" +
       "<tbody>" + rows + "</tbody>" +
       "</table>";
   }
@@ -1069,7 +1146,18 @@ body {
   function bindEvents() {
     document.getElementById("project-select").addEventListener("change", async (event) => {
       currentProjectId = event.target.value ? Number(event.target.value) : null;
+      const project = currentProjectId === null ? null : await getProjectById(currentProjectId);
+      currentProjectLocked = Boolean(project && project.locked);
+      renderLockUI();
       await renderMainArea();
+    });
+
+    document.getElementById("btn-toggle-lock").addEventListener("click", async () => {
+      if (currentProjectId === null) return;
+      const nextLocked = !currentProjectLocked;
+      await setProjectLocked(currentProjectId, nextLocked);
+      currentProjectLocked = nextLocked;
+      renderLockUI();
     });
 
     document.getElementById("btn-new-project").addEventListener("click", async () => {
@@ -1090,6 +1178,7 @@ body {
     });
 
     document.getElementById("btn-save-edit-project").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
       const name = document.getElementById("edit-project-name").value.trim();
       const description = document.getElementById("edit-project-description").value;
       if (!name) {
@@ -1102,7 +1191,7 @@ body {
     });
 
     document.getElementById("btn-delete-project").addEventListener("click", async () => {
-      if (currentProjectId === null) return;
+      if (currentProjectId === null || currentProjectLocked) return;
       const ok = window.confirm("選択中のプロジェクトを削除しますか？");
       if (!ok) return;
       await deleteProject(currentProjectId);
@@ -1120,6 +1209,7 @@ body {
     });
 
     document.getElementById("btn-confirm-add-schedule").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
       const title = document.getElementById("schedule-add-title").value.trim();
       const startDate = document.getElementById("schedule-add-start-date").value;
       const endDate = document.getElementById("schedule-add-end-date").value;
@@ -1175,6 +1265,7 @@ body {
     });
 
     document.getElementById("btn-add-milestone").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
       const date = document.getElementById("milestone-date").value;
       const label = document.getElementById("milestone-label").value.trim();
 
@@ -1195,6 +1286,7 @@ body {
     });
 
     document.getElementById("milestone-list").addEventListener("click", async (event) => {
+      if (currentProjectLocked) return;
       const deleteButton = event.target.closest("[data-delete-milestone-id]");
       if (!deleteButton) return;
 
@@ -1207,6 +1299,21 @@ body {
     document.getElementById("period-select").addEventListener("change", async (event) => {
       currentPeriod = event.target.value;
       await renderGanttChart();
+    });
+
+    document.getElementById("col-toggle-start").addEventListener("change", async (event) => {
+      visibleColumns.startDate = event.target.checked;
+      await renderScheduleTable();
+    });
+
+    document.getElementById("col-toggle-end").addEventListener("change", async (event) => {
+      visibleColumns.endDate = event.target.checked;
+      await renderScheduleTable();
+    });
+
+    document.getElementById("col-toggle-status").addEventListener("change", async (event) => {
+      visibleColumns.status = event.target.checked;
+      await renderScheduleTable();
     });
 
     document.getElementById("btn-today").addEventListener("click", async () => {
