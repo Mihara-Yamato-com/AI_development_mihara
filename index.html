@@ -124,6 +124,61 @@ body {
   background: #ef4444;
   pointer-events: none;
 }
+
+.grid-line {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: #e5e7eb;
+  pointer-events: none;
+}
+
+/* ==== Section: Modal ==== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-box {
+  background: #fff;
+  padding: 16px 20px;
+  border-radius: 6px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-box h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.modal-box input,
+.modal-box textarea {
+  font-size: 14px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
 </style>
 </head>
 <body>
@@ -132,6 +187,7 @@ body {
   <select id="project-select"></select>
   <button id="btn-new-project">新規プロジェクト作成</button>
   <button id="btn-delete-project">プロジェクト削除</button>
+  <button id="btn-edit-project">編集</button>
 </header>
 
 <div class="toolbar">
@@ -150,6 +206,20 @@ body {
   <section id="schedule-table-container" class="schedule-table"></section>
   <section id="gantt-chart-container" class="gantt-chart"></section>
 </main>
+
+<div id="project-edit-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>プロジェクト概要編集</h2>
+    <label for="edit-project-name">プロジェクト名</label>
+    <input id="edit-project-name" type="text">
+    <label for="edit-project-description">説明</label>
+    <textarea id="edit-project-description" rows="4"></textarea>
+    <div class="modal-actions">
+      <button id="btn-cancel-edit-project">キャンセル</button>
+      <button id="btn-save-edit-project">保存</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -282,6 +352,48 @@ body {
     });
   }
 
+  /**
+   * idを指定してプロジェクトを1件取得する
+   * @param {number} id
+   * @returns {Promise<Object|undefined>}
+   */
+  function getProjectById(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readonly");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const request = store.get(id);
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * プロジェクトの名前・説明を更新する
+   * @param {number} id
+   * @param {Object} changes
+   * @param {string} changes.name
+   * @param {string} changes.description
+   * @returns {Promise<void>}
+   */
+  function updateProject(id, changes) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readwrite");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const project = getRequest.result;
+        project.name = changes.name;
+        project.description = changes.description;
+        project.updatedAt = Date.now();
+        const putRequest = store.put(project);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
   /* ---- Sub-section: Schedule Items ---- */
 
   /**
@@ -362,6 +474,30 @@ body {
     const stillExists = projects.some((p) => p.id === currentProjectId);
     currentProjectId = stillExists ? currentProjectId : projects[0].id;
     select.value = String(currentProjectId);
+  }
+
+  /* ---- Sub-section: Project Edit Modal ---- */
+
+  /**
+   * プロジェクト概要編集モーダルを、選択中プロジェクトの現在値で開く
+   * @returns {Promise<void>}
+   */
+  async function openProjectEditModal() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    const project = await getProjectById(currentProjectId);
+    document.getElementById("edit-project-name").value = project.name;
+    document.getElementById("edit-project-description").value = project.description;
+    document.getElementById("project-edit-modal").hidden = false;
+  }
+
+  /**
+   * プロジェクト概要編集モーダルを閉じる
+   */
+  function closeProjectEditModal() {
+    document.getElementById("project-edit-modal").hidden = true;
   }
 
   /* ---- Sub-section: Schedule Table ---- */
@@ -506,15 +642,21 @@ body {
     const totalHeight = headerHeightPx + items.length * rowHeightPx;
 
     const headerCells = [];
+    const gridLines = [];
     for (let i = 0; i < totalDays; i++) {
       const cellDate = new Date(rangeStart);
       cellDate.setDate(cellDate.getDate() + i);
-      const label = shouldShowDateLabel(cellDate, i) ? formatDateLabel(cellDate) : "";
+      const showLabel = shouldShowDateLabel(cellDate, i);
       headerCells.push(
         "<div class=\"gantt-header-cell\" style=\"width:" + dayWidthPx + "px\">" +
-        label +
+        (showLabel ? formatDateLabel(cellDate) : "") +
         "</div>"
       );
+      if (showLabel) {
+        gridLines.push(
+          "<div class=\"grid-line\" style=\"left:" + (i * dayWidthPx) + "px; height:" + totalHeight + "px\"></div>"
+        );
+      }
     }
 
     const rows = items
@@ -540,6 +682,7 @@ body {
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
       "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
+      gridLines.join("") +
       rows +
       todayLine +
       "</div>";
@@ -572,6 +715,26 @@ body {
       currentProjectId = newId;
       await refreshProjectSelect();
       await renderMainArea();
+    });
+
+    document.getElementById("btn-edit-project").addEventListener("click", async () => {
+      await openProjectEditModal();
+    });
+
+    document.getElementById("btn-cancel-edit-project").addEventListener("click", () => {
+      closeProjectEditModal();
+    });
+
+    document.getElementById("btn-save-edit-project").addEventListener("click", async () => {
+      const name = document.getElementById("edit-project-name").value.trim();
+      const description = document.getElementById("edit-project-description").value;
+      if (!name) {
+        window.alert("プロジェクト名を入力してください");
+        return;
+      }
+      await updateProject(currentProjectId, { name: name, description: description });
+      closeProjectEditModal();
+      await refreshProjectSelect();
     });
 
     document.getElementById("btn-delete-project").addEventListener("click", async () => {
