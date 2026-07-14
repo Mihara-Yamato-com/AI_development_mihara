@@ -72,6 +72,44 @@ body {
   padding: 12px;
   color: #6b7280;
   font-size: 13px;
+  overflow-x: auto;
+}
+
+/* ==== Section: Gantt Chart Rendering ==== */
+.gantt-scroll {
+  display: inline-block;
+}
+
+.gantt-header {
+  display: flex;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.gantt-header-cell {
+  flex: 0 0 auto;
+  text-align: center;
+  border-right: 1px solid #e5e7eb;
+  padding: 2px 0;
+  box-sizing: border-box;
+}
+
+.gantt-row {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 4px;
+  height: 20px;
+  background: #3b82f6;
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 </style>
 </head>
@@ -89,7 +127,7 @@ body {
 
 <main class="main-area">
   <section id="schedule-table-container" class="schedule-table"></section>
-  <section id="gantt-chart-container" class="gantt-chart">(ガントチャートは1-Cで実装予定)</section>
+  <section id="gantt-chart-container" class="gantt-chart"></section>
 </main>
 
 <script>
@@ -98,12 +136,13 @@ body {
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
+  const DAY_WIDTH_PX = 24;
 
   let db = null;
   let currentProjectId = null;
@@ -113,8 +152,17 @@ body {
   async function init() {
     db = await openDatabase();
     await refreshProjectSelect();
-    await renderScheduleTable();
+    await renderMainArea();
     bindEvents();
+  }
+
+  /**
+   * スケジュール表とガントチャートをまとめて再描画する
+   * @returns {Promise<void>}
+   */
+  async function renderMainArea() {
+    await renderScheduleTable();
+    await renderGanttChart();
   }
 
   /* ==== Section: データ層(IndexedDB) ==== */
@@ -340,12 +388,103 @@ body {
     return div.innerHTML;
   }
 
+  /* ---- Sub-section: Gantt Chart Rendering ---- */
+
+  /**
+   * YYYY-MM-DD形式の文字列を、ローカル日付のDateに変換する
+   * @param {string} dateStr
+   * @returns {Date}
+   */
+  function parseDateStr(dateStr) {
+    return new Date(dateStr + "T00:00:00");
+  }
+
+  /**
+   * 2つの日付の差を日数で返す（b - a）
+   * @param {Date} a
+   * @param {Date} b
+   * @returns {number}
+   */
+  function diffInDays(a, b) {
+    return Math.round((b.getTime() - a.getTime()) / 86400000);
+  }
+
+  /**
+   * ガントチャートのヘッダーに表示する日付ラベルを作る（例: 7/14）
+   * @param {Date} date
+   * @returns {string}
+   */
+  function formatDateLabel(date) {
+    return (date.getMonth() + 1) + "/" + date.getDate();
+  }
+
+  /**
+   * 選択中プロジェクトのガントチャートを描画し直す
+   * 表示範囲は、全スケジュール項目の最も早い開始日〜最も遅い終了日を1日単位で並べたもの
+   * @returns {Promise<void>}
+   */
+  async function renderGanttChart() {
+    const container = document.getElementById("gantt-chart-container");
+
+    if (currentProjectId === null) {
+      container.innerHTML = "";
+      return;
+    }
+
+    const items = await getScheduleItemsByProject(currentProjectId);
+
+    if (items.length === 0) {
+      container.innerHTML = "<p>スケジュール項目がありません</p>";
+      return;
+    }
+
+    const startDates = items.map((item) => parseDateStr(item.startDate));
+    const endDates = items.map((item) => parseDateStr(item.endDate));
+    const rangeStart = new Date(Math.min.apply(null, startDates));
+    const rangeEnd = new Date(Math.max.apply(null, endDates));
+    const totalDays = diffInDays(rangeStart, rangeEnd) + 1;
+    const totalWidth = totalDays * DAY_WIDTH_PX;
+
+    const headerCells = [];
+    for (let i = 0; i < totalDays; i++) {
+      const cellDate = new Date(rangeStart);
+      cellDate.setDate(cellDate.getDate() + i);
+      headerCells.push(
+        "<div class=\"gantt-header-cell\" style=\"width:" + DAY_WIDTH_PX + "px\">" +
+        formatDateLabel(cellDate) +
+        "</div>"
+      );
+    }
+
+    const rows = items
+      .map((item) => {
+        const itemStart = parseDateStr(item.startDate);
+        const itemEnd = parseDateStr(item.endDate);
+        const left = diffInDays(rangeStart, itemStart) * DAY_WIDTH_PX;
+        const width = (diffInDays(itemStart, itemEnd) + 1) * DAY_WIDTH_PX;
+        return (
+          "<div class=\"gantt-row\" style=\"width:" + totalWidth + "px\">" +
+          "<div class=\"gantt-bar\" style=\"left:" + left + "px; width:" + width + "px\">" +
+          escapeHtml(item.title) +
+          "</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    container.innerHTML =
+      "<div class=\"gantt-scroll\">" +
+      "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
+      rows +
+      "</div>";
+  }
+
   /* ==== Section: イベントハンドラ ==== */
 
   function bindEvents() {
     document.getElementById("project-select").addEventListener("change", async (event) => {
       currentProjectId = event.target.value ? Number(event.target.value) : null;
-      await renderScheduleTable();
+      await renderMainArea();
     });
 
     document.getElementById("btn-new-project").addEventListener("click", async () => {
@@ -354,7 +493,7 @@ body {
       const newId = await addProject(name);
       currentProjectId = newId;
       await refreshProjectSelect();
-      await renderScheduleTable();
+      await renderMainArea();
     });
 
     document.getElementById("btn-delete-project").addEventListener("click", async () => {
@@ -364,7 +503,7 @@ body {
       await deleteProject(currentProjectId);
       currentProjectId = null;
       await refreshProjectSelect();
-      await renderScheduleTable();
+      await renderMainArea();
     });
 
     document.getElementById("btn-add-schedule").addEventListener("click", async () => {
@@ -385,7 +524,7 @@ body {
         startDate: startDate,
         endDate: endDate,
       });
-      await renderScheduleTable();
+      await renderMainArea();
     });
   }
 })();

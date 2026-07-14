@@ -43,8 +43,9 @@ Webアプリケーション（GantForge）を、AI駆動開発（Claude / Claude
 
 - ブランチ構成: `main`の直下に`develop`ブランチを置く。各作業は`develop`から切った作業ブランチ（`feature/<フェーズ番号>-<内容>`、例: `feature/1-c-gantt-chart`）で行う
 - 新しい作業に着手する際は、`develop`から作業ブランチを作成してから実装する
-- ローカルコミット・GitHubへのpushは、必ず事前にユーザーに確認を取ってから実行する。無断でcommit/pushしない
-- プルリクエスト(PR)の作成・マージは行わない。commit・push（作業ブランチ→develop、developが溜まったらdevelop→mainのPR含む）はすべてユーザーがGitHub上で手動で行う
+- ローカルコミット・GitHubへのpushは、事前確認なしで実行してよい。ただしコミットメッセージは「何を・なぜ変更したか」が伝わるよう丁寧に書く
+- プルリクエスト(PR)の作成・マージは行わない。作業ブランチの実装が完了し、developへのPRを出せる状態になったタイミングで、その都度ユーザーに通告する。developがまとまりmainへのPRを出せる状態になった場合も同様に通告する
+- PR作成時は `.github/PULL_REQUEST_TEMPLATE.md` を使う
 
 ---
 
