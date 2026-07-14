@@ -125,6 +125,14 @@ body {
   pointer-events: none;
 }
 
+.grid-line {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: #e5e7eb;
+  pointer-events: none;
+}
+
 /* ==== Section: Modal ==== */
 .modal-overlay {
   position: fixed;
@@ -634,15 +642,21 @@ body {
     const totalHeight = headerHeightPx + items.length * rowHeightPx;
 
     const headerCells = [];
+    const gridLines = [];
     for (let i = 0; i < totalDays; i++) {
       const cellDate = new Date(rangeStart);
       cellDate.setDate(cellDate.getDate() + i);
-      const label = shouldShowDateLabel(cellDate, i) ? formatDateLabel(cellDate) : "";
+      const showLabel = shouldShowDateLabel(cellDate, i);
       headerCells.push(
         "<div class=\"gantt-header-cell\" style=\"width:" + dayWidthPx + "px\">" +
-        label +
+        (showLabel ? formatDateLabel(cellDate) : "") +
         "</div>"
       );
+      if (showLabel) {
+        gridLines.push(
+          "<div class=\"grid-line\" style=\"left:" + (i * dayWidthPx) + "px; height:" + totalHeight + "px\"></div>"
+        );
+      }
     }
 
     const rows = items
@@ -668,6 +682,7 @@ body {
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
       "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
+      gridLines.join("") +
       rows +
       todayLine +
       "</div>";
