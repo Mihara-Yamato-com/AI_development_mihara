@@ -67,6 +67,18 @@ body {
   text-align: left;
 }
 
+.toggle-arrow {
+  display: inline-block;
+  width: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-spacer {
+  display: inline-block;
+  width: 14px;
+}
+
 .gantt-chart {
   flex: 1;
   padding: 12px;
@@ -200,6 +212,7 @@ body {
     <option value="quarter">3ヶ月</option>
   </select>
   <button id="btn-today">今日</button>
+  <button id="btn-expand-all">全て開く</button>
 </div>
 
 <main class="main-area">
@@ -230,6 +243,8 @@ body {
     <input id="schedule-add-start-date" type="date">
     <label for="schedule-add-end-date">終了日</label>
     <input id="schedule-add-end-date" type="date">
+    <label for="schedule-add-parent">親項目</label>
+    <select id="schedule-add-parent"></select>
     <div class="modal-actions">
       <button id="btn-cancel-add-schedule">キャンセル</button>
       <button id="btn-confirm-add-schedule">追加</button>
@@ -419,6 +434,7 @@ body {
    * @param {string} item.title - 作業内容
    * @param {string} item.startDate - 開始日(YYYY-MM-DD)
    * @param {string} item.endDate - 終了日(YYYY-MM-DD)
+   * @param {number|null} [item.parentId] - 親項目のid(トップレベルはnull)
    * @returns {Promise<number>} 追加されたスケジュール項目のid
    */
   function addScheduleItem(item) {
@@ -432,6 +448,8 @@ body {
         endDate: item.endDate,
         status: STATUS_NOT_STARTED,
         order: Date.now(),
+        parentId: item.parentId || null,
+        collapsed: false,
       });
       request.onsuccess = (event) => resolve(event.target.result);
       request.onerror = (event) => reject(event.target.error);
@@ -455,6 +473,48 @@ body {
         resolve(items);
       };
       request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * スケジュール項目の折りたたみ状態を更新する
+   * @param {number} id
+   * @param {boolean} collapsed
+   * @returns {Promise<void>}
+   */
+  function setScheduleItemCollapsed(id, collapsed) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const item = getRequest.result;
+        item.collapsed = collapsed;
+        const putRequest = store.put(item);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトの全スケジュール項目を展開状態(collapsed=false)にする
+   * @param {number} projectId
+   * @returns {Promise<void>}
+   */
+  async function expandAllScheduleItems(projectId) {
+    const items = await getScheduleItemsByProject(projectId);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      items.forEach((item) => {
+        item.collapsed = false;
+        store.put(item);
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = (event) => reject(event.target.error);
     });
   }
 
@@ -516,12 +576,53 @@ body {
     document.getElementById("project-edit-modal").hidden = true;
   }
 
+  /* ---- Sub-section: Schedule Hierarchy ---- */
+
+  /**
+   * フラットなスケジュール項目配列から、親子関係(parentId)と折りたたみ状態(collapsed)を
+   * 反映した表示順のリストを作る(深さ優先)
+   * @param {Array<Object>} items
+   * @param {Object} [options]
+   * @param {boolean} [options.ignoreCollapsed] - trueの場合、折りたたみ状態を無視して全展開する
+   * @returns {Array<{item: Object, depth: number, hasChildren: boolean}>}
+   */
+  function buildVisibleScheduleList(items, options) {
+    const ignoreCollapsed = Boolean(options && options.ignoreCollapsed);
+    const childrenByParentId = new Map();
+
+    items.forEach((item) => {
+      const parentId = item.parentId || null;
+      if (!childrenByParentId.has(parentId)) {
+        childrenByParentId.set(parentId, []);
+      }
+      childrenByParentId.get(parentId).push(item);
+    });
+
+    const result = [];
+
+    function visit(parentId, depth) {
+      const children = childrenByParentId.get(parentId) || [];
+      children.forEach((item) => {
+        const hasChildren = (childrenByParentId.get(item.id) || []).length > 0;
+        result.push({ item: item, depth: depth, hasChildren: hasChildren });
+        if (ignoreCollapsed || !item.collapsed) {
+          visit(item.id, depth + 1);
+        }
+      });
+    }
+
+    visit(null, 0);
+    return result;
+  }
+
   /* ---- Sub-section: Schedule Add Modal ---- */
 
   /**
-   * スケジュール追加モーダルを、入力欄を空にした状態で開く
+   * スケジュール追加モーダルを、入力欄を空にした状態で開く。
+   * 親項目セレクタは、現在のプロジェクトの全項目を階層インデント付きで一覧表示する
+   * @returns {Promise<void>}
    */
-  function openScheduleAddModal() {
+  async function openScheduleAddModal() {
     if (currentProjectId === null) {
       window.alert("先にプロジェクトを作成・選択してください");
       return;
@@ -529,6 +630,24 @@ body {
     document.getElementById("schedule-add-title").value = "";
     document.getElementById("schedule-add-start-date").value = "";
     document.getElementById("schedule-add-end-date").value = "";
+
+    const items = await getScheduleItemsByProject(currentProjectId);
+    const visibleList = buildVisibleScheduleList(items, { ignoreCollapsed: true });
+    const parentSelect = document.getElementById("schedule-add-parent");
+    parentSelect.innerHTML = "";
+
+    const noneOption = document.createElement("option");
+    noneOption.value = "";
+    noneOption.textContent = "なし（トップレベル）";
+    parentSelect.appendChild(noneOption);
+
+    visibleList.forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = String(entry.item.id);
+      option.textContent = "　".repeat(entry.depth) + entry.item.title;
+      parentSelect.appendChild(option);
+    });
+
     document.getElementById("schedule-add-modal").hidden = false;
   }
 
@@ -560,11 +679,20 @@ body {
       return;
     }
 
-    const rows = items
-      .map((item) => {
+    const visibleList = buildVisibleScheduleList(items);
+
+    const rows = visibleList
+      .map((entry) => {
+        const item = entry.item;
+        const toggle = entry.hasChildren
+          ? "<span class=\"toggle-arrow\" data-toggle-id=\"" + item.id + "\">" +
+            (item.collapsed ? "▶" : "▼") +
+            "</span>"
+          : "<span class=\"toggle-spacer\"></span>";
+        const indentPx = entry.depth * 16 + 4;
         return (
           "<tr>" +
-          "<td>" + escapeHtml(item.title) + "</td>" +
+          "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
           "<td>" + escapeHtml(item.startDate) + "</td>" +
           "<td>" + escapeHtml(item.endDate) + "</td>" +
           "<td>" + escapeHtml(item.status) + "</td>" +
@@ -693,7 +821,9 @@ body {
     const totalWidth = totalDays * dayWidthPx;
     const headerHeightPx = 20;
     const rowHeightPx = 28;
-    const totalHeight = headerHeightPx + items.length * rowHeightPx;
+
+    const visibleList = buildVisibleScheduleList(items);
+    const totalHeight = headerHeightPx + visibleList.length * rowHeightPx;
 
     const headerCells = [];
     const gridLines = [];
@@ -713,8 +843,9 @@ body {
       }
     }
 
-    const rows = items
-      .map((item) => {
+    const rows = visibleList
+      .map((entry) => {
+        const item = entry.item;
         const itemStart = parseDateStr(item.startDate);
         const itemEnd = parseDateStr(item.endDate);
         const left = diffInDays(rangeStart, itemStart) * dayWidthPx;
@@ -801,8 +932,8 @@ body {
       await renderMainArea();
     });
 
-    document.getElementById("btn-add-schedule").addEventListener("click", () => {
-      openScheduleAddModal();
+    document.getElementById("btn-add-schedule").addEventListener("click", async () => {
+      await openScheduleAddModal();
     });
 
     document.getElementById("btn-cancel-add-schedule").addEventListener("click", () => {
@@ -813,6 +944,7 @@ body {
       const title = document.getElementById("schedule-add-title").value.trim();
       const startDate = document.getElementById("schedule-add-start-date").value;
       const endDate = document.getElementById("schedule-add-end-date").value;
+      const parentIdValue = document.getElementById("schedule-add-parent").value;
 
       if (!title) {
         window.alert("作業内容を入力してください");
@@ -832,8 +964,26 @@ body {
         title: title,
         startDate: startDate,
         endDate: endDate,
+        parentId: parentIdValue ? Number(parentIdValue) : null,
       });
       closeScheduleAddModal();
+      await renderMainArea();
+    });
+
+    document.getElementById("schedule-table-container").addEventListener("click", async (event) => {
+      const toggle = event.target.closest(".toggle-arrow");
+      if (!toggle) return;
+
+      const id = Number(toggle.dataset.toggleId);
+      const items = await getScheduleItemsByProject(currentProjectId);
+      const item = items.find((i) => i.id === id);
+      await setScheduleItemCollapsed(id, !item.collapsed);
+      await renderMainArea();
+    });
+
+    document.getElementById("btn-expand-all").addEventListener("click", async () => {
+      if (currentProjectId === null) return;
+      await expandAllScheduleItems(currentProjectId);
       await renderMainArea();
     });
 
