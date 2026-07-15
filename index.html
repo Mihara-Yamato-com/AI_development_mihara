@@ -293,6 +293,55 @@ button:disabled {
   background: #b91c1c;
   color: #fff;
 }
+
+/* ==== Section: Side Panel (共通の枠組み) ==== */
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: #fff;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.side-panel[hidden] {
+  display: none;
+}
+
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.side-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.side-panel-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.history-list-item {
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.history-list-item .history-timestamp {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+}
 </style>
 </head>
 <body>
@@ -321,6 +370,7 @@ button:disabled {
   <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
   <button id="btn-milestones">マイルストーン</button>
   <button id="btn-edit-project">編集</button>
+  <button id="btn-history">変更履歴</button>
 </div>
 
 <main class="main-area">
@@ -391,18 +441,28 @@ button:disabled {
   </div>
 </div>
 
+<aside id="history-panel" class="side-panel" hidden>
+  <div class="side-panel-header">
+    <h2>変更履歴</h2>
+    <button id="btn-close-history-panel">閉じる</button>
+  </div>
+  <div id="history-list" class="side-panel-body"></div>
+</aside>
+
 <script>
 (function () {
   "use strict";
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
   const STORE_MILESTONES = "milestones";
   const INDEX_MILESTONES_BY_PROJECT = "by_projectId";
+  const STORE_CHANGE_LOGS = "changeLogs";
+  const INDEX_CHANGE_LOGS_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
   const STATUS_IN_PROGRESS = "進行中";
@@ -479,6 +539,16 @@ button:disabled {
             autoIncrement: true,
           });
           milestoneStore.createIndex(INDEX_MILESTONES_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_CHANGE_LOGS)) {
+          const changeLogStore = database.createObjectStore(STORE_CHANGE_LOGS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          changeLogStore.createIndex(INDEX_CHANGE_LOGS_BY_PROJECT, "projectId", {
             unique: false,
           });
         }
@@ -834,6 +904,62 @@ button:disabled {
     });
   }
 
+  /* ---- Sub-section: Change Logs ---- */
+
+  /**
+   * 変更履歴を1件追加する
+   * @param {number} projectId
+   * @param {string} message - 変更内容を表す文言
+   * @returns {Promise<number>} 追加された変更履歴のid
+   */
+  function addChangeLog(projectId, message) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_CHANGE_LOGS, "readwrite");
+      const store = tx.objectStore(STORE_CHANGE_LOGS);
+      const request = store.add({
+        projectId: projectId,
+        timestamp: Date.now(),
+        message: message,
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトの変更履歴を、新しい順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getChangeLogsByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_CHANGE_LOGS, "readonly");
+      const store = tx.objectStore(STORE_CHANGE_LOGS);
+      const index = store.index(INDEX_CHANGE_LOGS_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const logs = event.target.result;
+        logs.sort((a, b) => b.timestamp - a.timestamp);
+        resolve(logs);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * epoch msをYYYY-MM-DD HH:MM形式の文字列にする
+   * @param {number} timestamp
+   * @returns {string}
+   */
+  function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) +
+      " " + pad(date.getHours()) + ":" + pad(date.getMinutes())
+    );
+  }
+
   /* ==== Section: UI描画 ==== */
 
   /* ---- Sub-section: Projects ---- */
@@ -1047,6 +1173,53 @@ button:disabled {
           "<div class=\"milestone-list-item\">" +
           "<span>" + escapeHtml(milestone.date) + " " + escapeHtml(milestone.label) + "</span>" +
           "<button data-delete-milestone-id=\"" + milestone.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  /* ---- Sub-section: Change History Panel ---- */
+
+  /**
+   * 変更履歴パネルを、選択中プロジェクトの一覧を表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openHistoryPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    await renderHistoryList();
+    document.getElementById("history-panel").hidden = false;
+  }
+
+  /**
+   * 変更履歴パネルを閉じる
+   */
+  function closeHistoryPanel() {
+    document.getElementById("history-panel").hidden = true;
+  }
+
+  /**
+   * 変更履歴パネル内の一覧を再描画する（新しい順）
+   * @returns {Promise<void>}
+   */
+  async function renderHistoryList() {
+    const logs = await getChangeLogsByProject(currentProjectId);
+    const container = document.getElementById("history-list");
+
+    if (logs.length === 0) {
+      container.innerHTML = "<p>変更履歴がありません</p>";
+      return;
+    }
+
+    container.innerHTML = logs
+      .map((log) => {
+        return (
+          "<div class=\"history-list-item\">" +
+          "<span class=\"history-timestamp\">" + escapeHtml(formatTimestamp(log.timestamp)) + "</span>" +
+          escapeHtml(log.message) +
           "</div>"
         );
       })
@@ -1521,6 +1694,7 @@ button:disabled {
       await setProjectLocked(currentProjectId, nextLocked);
       currentProjectLocked = nextLocked;
       renderLockUI();
+      await addChangeLog(currentProjectId, nextLocked ? "プロジェクトをロックしました" : "プロジェクトのロックを解除しました");
     });
 
     document.getElementById("btn-new-project").addEventListener("click", async () => {
@@ -1553,6 +1727,7 @@ button:disabled {
       await updateProject(currentProjectId, { name: name, description: description });
       closeProjectEditModal();
       await refreshProjectSelect();
+      await addChangeLog(currentProjectId, "プロジェクト概要を編集しました");
     });
 
     document.getElementById("btn-delete-project").addEventListener("click", async () => {
@@ -1604,6 +1779,7 @@ button:disabled {
       });
       closeScheduleAddModal();
       await renderMainArea();
+      await addChangeLog(currentProjectId, "作業「" + title + "」を追加しました");
     });
 
     document.getElementById("schedule-table-container").addEventListener("click", async (event) => {
@@ -1621,7 +1797,9 @@ button:disabled {
       if (!event.target.classList.contains("status-select")) return;
       if (currentProjectLocked) return;
       const itemId = Number(event.target.dataset.itemId);
+      const item = await getScheduleItemById(itemId);
       await updateScheduleItem(itemId, { status: event.target.value });
+      await addChangeLog(currentProjectId, "作業「" + item.title + "」の状態を「" + event.target.value + "」に変更しました");
     });
 
     document.getElementById("schedule-table-container").addEventListener("click", async (event) => {
@@ -1639,8 +1817,10 @@ button:disabled {
       if (button.classList.contains("btn-row-delete")) {
         const ok = window.confirm("このスケジュール項目を削除しますか？");
         if (!ok) return;
+        const item = await getScheduleItemById(itemId);
         await deleteScheduleItem(itemId);
         await renderMainArea();
+        await addChangeLog(currentProjectId, "作業「" + item.title + "」を削除しました");
         return;
       }
 
@@ -1653,6 +1833,7 @@ button:disabled {
         if (targetIndex < 0 || targetIndex >= siblings.length) return;
         await swapScheduleItemOrder(siblings[index], siblings[targetIndex]);
         await renderMainArea();
+        await addChangeLog(currentProjectId, "作業「" + item.title + "」の順序を変更しました");
         return;
       }
     });
@@ -1682,6 +1863,7 @@ button:disabled {
       await updateScheduleItem(editingScheduleItemId, { title: title, startDate: startDate, endDate: endDate });
       closeScheduleEditModal();
       await renderMainArea();
+      await addChangeLog(currentProjectId, "作業「" + title + "」を編集しました");
     });
 
     document.getElementById("btn-expand-all").addEventListener("click", async () => {
@@ -1694,6 +1876,14 @@ button:disabled {
 
     document.getElementById("btn-milestones").addEventListener("click", async () => {
       await openMilestoneModal();
+    });
+
+    document.getElementById("btn-history").addEventListener("click", async () => {
+      await openHistoryPanel();
+    });
+
+    document.getElementById("btn-close-history-panel").addEventListener("click", () => {
+      closeHistoryPanel();
     });
 
     document.getElementById("btn-close-milestone-modal").addEventListener("click", () => {
@@ -1719,6 +1909,7 @@ button:disabled {
       document.getElementById("milestone-label").value = "";
       await renderMilestoneList();
       await renderGanttChart();
+      await addChangeLog(currentProjectId, "マイルストーン「" + label + "」(" + date + ")を追加しました");
     });
 
     document.getElementById("milestone-list").addEventListener("click", async (event) => {
@@ -1727,9 +1918,14 @@ button:disabled {
       if (!deleteButton) return;
 
       const id = Number(deleteButton.dataset.deleteMilestoneId);
+      const milestones = await getMilestonesByProject(currentProjectId);
+      const milestone = milestones.find((m) => m.id === id);
       await deleteMilestone(id);
       await renderMilestoneList();
       await renderGanttChart();
+      if (milestone) {
+        await addChangeLog(currentProjectId, "マイルストーン「" + milestone.label + "」(" + milestone.date + ")を削除しました");
+      }
     });
 
     document.getElementById("period-select").addEventListener("change", async (event) => {
