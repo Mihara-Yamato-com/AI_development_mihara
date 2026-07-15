@@ -67,6 +67,18 @@ body {
   text-align: left;
 }
 
+.toggle-arrow {
+  display: inline-block;
+  width: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-spacer {
+  display: inline-block;
+  width: 14px;
+}
+
 .gantt-chart {
   flex: 1;
   padding: 12px;
@@ -133,6 +145,23 @@ body {
   pointer-events: none;
 }
 
+.milestone-line {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  background: #a855f7;
+  pointer-events: none;
+}
+
+.milestone-label {
+  position: absolute;
+  top: 0;
+  font-size: 10px;
+  color: #a855f7;
+  white-space: nowrap;
+  transform: translateX(2px);
+}
+
 /* ==== Section: Modal ==== */
 .modal-overlay {
   position: fixed;
@@ -179,6 +208,36 @@ body {
   gap: 8px;
   margin-top: 8px;
 }
+
+.milestone-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 2px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.milestone-list-item button {
+  font-size: 12px;
+}
+
+/* ==== Section: Lock ==== */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-box input:disabled,
+.modal-box textarea:disabled {
+  background: #e5e7eb;
+  cursor: not-allowed;
+}
+
+#btn-toggle-lock.is-locked {
+  background: #b91c1c;
+  color: #fff;
+}
 </style>
 </head>
 <body>
@@ -188,6 +247,8 @@ body {
   <button id="btn-new-project">新規プロジェクト作成</button>
   <button id="btn-delete-project">プロジェクト削除</button>
   <button id="btn-edit-project">編集</button>
+  <button id="btn-milestones">マイルストーン</button>
+  <button id="btn-toggle-lock">ロック</button>
 </header>
 
 <div class="toolbar">
@@ -200,6 +261,11 @@ body {
     <option value="quarter">3ヶ月</option>
   </select>
   <button id="btn-today">今日</button>
+  <button id="btn-expand-all">全て開く</button>
+  <span>表示列:</span>
+  <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
+  <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
+  <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
 </div>
 
 <main class="main-area">
@@ -230,9 +296,26 @@ body {
     <input id="schedule-add-start-date" type="date">
     <label for="schedule-add-end-date">終了日</label>
     <input id="schedule-add-end-date" type="date">
+    <label for="schedule-add-parent">親項目</label>
+    <select id="schedule-add-parent"></select>
     <div class="modal-actions">
       <button id="btn-cancel-add-schedule">キャンセル</button>
       <button id="btn-confirm-add-schedule">追加</button>
+    </div>
+  </div>
+</div>
+
+<div id="milestone-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>マイルストーン設定</h2>
+    <div id="milestone-list"></div>
+    <label for="milestone-date">日付</label>
+    <input id="milestone-date" type="date">
+    <label for="milestone-label">ラベル</label>
+    <input id="milestone-label" type="text">
+    <div class="modal-actions">
+      <button id="btn-close-milestone-modal">閉じる</button>
+      <button id="btn-add-milestone">追加</button>
     </div>
   </div>
 </div>
@@ -243,10 +326,12 @@ body {
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
+  const STORE_MILESTONES = "milestones";
+  const INDEX_MILESTONES_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
 
@@ -260,6 +345,8 @@ body {
   let db = null;
   let currentProjectId = null;
   let currentPeriod = "day";
+  let currentProjectLocked = false;
+  let visibleColumns = { startDate: true, endDate: true, status: true };
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -305,6 +392,16 @@ body {
             autoIncrement: true,
           });
           scheduleStore.createIndex(INDEX_SCHEDULE_ITEMS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_MILESTONES)) {
+          const milestoneStore = database.createObjectStore(STORE_MILESTONES, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          milestoneStore.createIndex(INDEX_MILESTONES_BY_PROJECT, "projectId", {
             unique: false,
           });
         }
@@ -410,6 +507,29 @@ body {
     });
   }
 
+  /**
+   * プロジェクトのロック状態を更新する
+   * @param {number} id
+   * @param {boolean} locked
+   * @returns {Promise<void>}
+   */
+  function setProjectLocked(id, locked) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_PROJECTS, "readwrite");
+      const store = tx.objectStore(STORE_PROJECTS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const project = getRequest.result;
+        project.locked = locked;
+        const putRequest = store.put(project);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
   /* ---- Sub-section: Schedule Items ---- */
 
   /**
@@ -419,6 +539,7 @@ body {
    * @param {string} item.title - 作業内容
    * @param {string} item.startDate - 開始日(YYYY-MM-DD)
    * @param {string} item.endDate - 終了日(YYYY-MM-DD)
+   * @param {number|null} [item.parentId] - 親項目のid(トップレベルはnull)
    * @returns {Promise<number>} 追加されたスケジュール項目のid
    */
   function addScheduleItem(item) {
@@ -432,6 +553,8 @@ body {
         endDate: item.endDate,
         status: STATUS_NOT_STARTED,
         order: Date.now(),
+        parentId: item.parentId || null,
+        collapsed: false,
       });
       request.onsuccess = (event) => resolve(event.target.result);
       request.onerror = (event) => reject(event.target.error);
@@ -458,6 +581,107 @@ body {
     });
   }
 
+  /**
+   * スケジュール項目の折りたたみ状態を更新する
+   * @param {number} id
+   * @param {boolean} collapsed
+   * @returns {Promise<void>}
+   */
+  function setScheduleItemCollapsed(id, collapsed) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const item = getRequest.result;
+        item.collapsed = collapsed;
+        const putRequest = store.put(item);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトの全スケジュール項目を展開状態(collapsed=false)にする
+   * @param {number} projectId
+   * @returns {Promise<void>}
+   */
+  async function expandAllScheduleItems(projectId) {
+    const items = await getScheduleItemsByProject(projectId);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      items.forEach((item) => {
+        item.collapsed = false;
+        store.put(item);
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /* ---- Sub-section: Milestones ---- */
+
+  /**
+   * マイルストーンを新規追加する
+   * @param {Object} milestone
+   * @param {number} milestone.projectId
+   * @param {string} milestone.date - 日付(YYYY-MM-DD)
+   * @param {string} milestone.label
+   * @returns {Promise<number>} 追加されたマイルストーンのid
+   */
+  function addMilestone(milestone) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MILESTONES, "readwrite");
+      const store = tx.objectStore(STORE_MILESTONES);
+      const request = store.add({
+        projectId: milestone.projectId,
+        date: milestone.date,
+        label: milestone.label,
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトのマイルストーンを、日付順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getMilestonesByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MILESTONES, "readonly");
+      const store = tx.objectStore(STORE_MILESTONES);
+      const index = store.index(INDEX_MILESTONES_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const milestones = event.target.result;
+        milestones.sort((a, b) => (a.date < b.date ? -1 : 1));
+        resolve(milestones);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * マイルストーンを削除する
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteMilestone(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MILESTONES, "readwrite");
+      const store = tx.objectStore(STORE_MILESTONES);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
   /* ==== Section: UI描画 ==== */
 
   /* ---- Sub-section: Projects ---- */
@@ -477,6 +701,8 @@ body {
       option.value = "";
       select.appendChild(option);
       currentProjectId = null;
+      currentProjectLocked = false;
+      renderLockUI();
       return;
     }
 
@@ -490,6 +716,27 @@ body {
     const stillExists = projects.some((p) => p.id === currentProjectId);
     currentProjectId = stillExists ? currentProjectId : projects[0].id;
     select.value = String(currentProjectId);
+
+    const currentProject = projects.find((p) => p.id === currentProjectId);
+    currentProjectLocked = Boolean(currentProject && currentProject.locked);
+    renderLockUI();
+  }
+
+  /* ---- Sub-section: Lock ---- */
+
+  /**
+   * currentProjectLockedに応じて、ロックボタンの表示と、
+   * ロック中は操作不可にすべきボタン・入力欄のdisabled状態を更新する
+   */
+  function renderLockUI() {
+    const lockButton = document.getElementById("btn-toggle-lock");
+    lockButton.textContent = currentProjectLocked ? "ロック解除" : "ロック";
+    lockButton.disabled = currentProjectId === null;
+    lockButton.classList.toggle("is-locked", currentProjectLocked);
+
+    ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label"].forEach((id) => {
+      document.getElementById(id).disabled = currentProjectLocked;
+    });
   }
 
   /* ---- Sub-section: Project Edit Modal ---- */
@@ -516,12 +763,53 @@ body {
     document.getElementById("project-edit-modal").hidden = true;
   }
 
+  /* ---- Sub-section: Schedule Hierarchy ---- */
+
+  /**
+   * フラットなスケジュール項目配列から、親子関係(parentId)と折りたたみ状態(collapsed)を
+   * 反映した表示順のリストを作る(深さ優先)
+   * @param {Array<Object>} items
+   * @param {Object} [options]
+   * @param {boolean} [options.ignoreCollapsed] - trueの場合、折りたたみ状態を無視して全展開する
+   * @returns {Array<{item: Object, depth: number, hasChildren: boolean}>}
+   */
+  function buildVisibleScheduleList(items, options) {
+    const ignoreCollapsed = Boolean(options && options.ignoreCollapsed);
+    const childrenByParentId = new Map();
+
+    items.forEach((item) => {
+      const parentId = item.parentId || null;
+      if (!childrenByParentId.has(parentId)) {
+        childrenByParentId.set(parentId, []);
+      }
+      childrenByParentId.get(parentId).push(item);
+    });
+
+    const result = [];
+
+    function visit(parentId, depth) {
+      const children = childrenByParentId.get(parentId) || [];
+      children.forEach((item) => {
+        const hasChildren = (childrenByParentId.get(item.id) || []).length > 0;
+        result.push({ item: item, depth: depth, hasChildren: hasChildren });
+        if (ignoreCollapsed || !item.collapsed) {
+          visit(item.id, depth + 1);
+        }
+      });
+    }
+
+    visit(null, 0);
+    return result;
+  }
+
   /* ---- Sub-section: Schedule Add Modal ---- */
 
   /**
-   * スケジュール追加モーダルを、入力欄を空にした状態で開く
+   * スケジュール追加モーダルを、入力欄を空にした状態で開く。
+   * 親項目セレクタは、現在のプロジェクトの全項目を階層インデント付きで一覧表示する
+   * @returns {Promise<void>}
    */
-  function openScheduleAddModal() {
+  async function openScheduleAddModal() {
     if (currentProjectId === null) {
       window.alert("先にプロジェクトを作成・選択してください");
       return;
@@ -529,6 +817,24 @@ body {
     document.getElementById("schedule-add-title").value = "";
     document.getElementById("schedule-add-start-date").value = "";
     document.getElementById("schedule-add-end-date").value = "";
+
+    const items = await getScheduleItemsByProject(currentProjectId);
+    const visibleList = buildVisibleScheduleList(items, { ignoreCollapsed: true });
+    const parentSelect = document.getElementById("schedule-add-parent");
+    parentSelect.innerHTML = "";
+
+    const noneOption = document.createElement("option");
+    noneOption.value = "";
+    noneOption.textContent = "なし（トップレベル）";
+    parentSelect.appendChild(noneOption);
+
+    visibleList.forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = String(entry.item.id);
+      option.textContent = "　".repeat(entry.depth) + entry.item.title;
+      parentSelect.appendChild(option);
+    });
+
     document.getElementById("schedule-add-modal").hidden = false;
   }
 
@@ -537,6 +843,55 @@ body {
    */
   function closeScheduleAddModal() {
     document.getElementById("schedule-add-modal").hidden = true;
+  }
+
+  /* ---- Sub-section: Milestone Modal ---- */
+
+  /**
+   * マイルストーン設定モーダルを、選択中プロジェクトの一覧を表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openMilestoneModal() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    document.getElementById("milestone-date").value = "";
+    document.getElementById("milestone-label").value = "";
+    await renderMilestoneList();
+    document.getElementById("milestone-modal").hidden = false;
+  }
+
+  /**
+   * マイルストーン設定モーダルを閉じる
+   */
+  function closeMilestoneModal() {
+    document.getElementById("milestone-modal").hidden = true;
+  }
+
+  /**
+   * マイルストーン設定モーダル内の一覧を再描画する
+   * @returns {Promise<void>}
+   */
+  async function renderMilestoneList() {
+    const milestones = await getMilestonesByProject(currentProjectId);
+    const container = document.getElementById("milestone-list");
+
+    if (milestones.length === 0) {
+      container.innerHTML = "<p>マイルストーンがありません</p>";
+      return;
+    }
+
+    container.innerHTML = milestones
+      .map((milestone) => {
+        return (
+          "<div class=\"milestone-list-item\">" +
+          "<span>" + escapeHtml(milestone.date) + " " + escapeHtml(milestone.label) + "</span>" +
+          "<button data-delete-milestone-id=\"" + milestone.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
+          "</div>"
+        );
+      })
+      .join("");
   }
 
   /* ---- Sub-section: Schedule Table ---- */
@@ -560,14 +915,30 @@ body {
       return;
     }
 
-    const rows = items
-      .map((item) => {
+    const visibleList = buildVisibleScheduleList(items);
+
+    const headerCells =
+      "<th>作業内容</th>" +
+      (visibleColumns.startDate ? "<th>開始</th>" : "") +
+      (visibleColumns.endDate ? "<th>終了</th>" : "") +
+      (visibleColumns.status ? "<th>状態</th>" : "");
+
+    const rows = visibleList
+      .map((entry) => {
+        const item = entry.item;
+        const toggle = entry.hasChildren
+          ? "<span class=\"toggle-arrow\" data-toggle-id=\"" + item.id + "\">" +
+            (item.collapsed ? "▶" : "▼") +
+            "</span>"
+          : "<span class=\"toggle-spacer\"></span>";
+        const indentPx = entry.depth * 16 + 4;
+        const startCell = visibleColumns.startDate ? "<td>" + escapeHtml(item.startDate) + "</td>" : "";
+        const endCell = visibleColumns.endDate ? "<td>" + escapeHtml(item.endDate) + "</td>" : "";
+        const statusCell = visibleColumns.status ? "<td>" + escapeHtml(item.status) + "</td>" : "";
         return (
           "<tr>" +
-          "<td>" + escapeHtml(item.title) + "</td>" +
-          "<td>" + escapeHtml(item.startDate) + "</td>" +
-          "<td>" + escapeHtml(item.endDate) + "</td>" +
-          "<td>" + escapeHtml(item.status) + "</td>" +
+          "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
+          startCell + endCell + statusCell +
           "</tr>"
         );
       })
@@ -575,7 +946,7 @@ body {
 
     container.innerHTML =
       "<table>" +
-      "<thead><tr><th>作業内容</th><th>開始</th><th>終了</th><th>状態</th></tr></thead>" +
+      "<thead><tr>" + headerCells + "</tr></thead>" +
       "<tbody>" + rows + "</tbody>" +
       "</table>";
   }
@@ -674,6 +1045,7 @@ body {
     }
 
     const items = await getScheduleItemsByProject(currentProjectId);
+    const milestones = await getMilestonesByProject(currentProjectId);
 
     if (items.length === 0) {
       container.innerHTML = "<p>スケジュール項目がありません</p>";
@@ -687,13 +1059,16 @@ body {
 
     const startDates = items.map((item) => parseDateStr(item.startDate));
     const endDates = items.map((item) => parseDateStr(item.endDate));
+    const milestoneDates = milestones.map((milestone) => parseDateStr(milestone.date));
     const rangeStart = new Date(Math.min.apply(null, startDates.concat([today])));
-    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today, twoYearsAhead])));
+    const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today, twoYearsAhead]).concat(milestoneDates)));
     const totalDays = diffInDays(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * dayWidthPx;
     const headerHeightPx = 20;
     const rowHeightPx = 28;
-    const totalHeight = headerHeightPx + items.length * rowHeightPx;
+
+    const visibleList = buildVisibleScheduleList(items);
+    const totalHeight = headerHeightPx + visibleList.length * rowHeightPx;
 
     const headerCells = [];
     const gridLines = [];
@@ -713,8 +1088,9 @@ body {
       }
     }
 
-    const rows = items
-      .map((item) => {
+    const rows = visibleList
+      .map((entry) => {
+        const item = entry.item;
         const itemStart = parseDateStr(item.startDate);
         const itemEnd = parseDateStr(item.endDate);
         const left = diffInDays(rangeStart, itemStart) * dayWidthPx;
@@ -733,12 +1109,23 @@ body {
     const todayLine =
       "<div class=\"today-line\" style=\"left:" + todayLeft + "px; height:" + totalHeight + "px\"></div>";
 
+    const milestoneMarkers = milestones
+      .map((milestone) => {
+        const left = diffInDays(rangeStart, parseDateStr(milestone.date)) * dayWidthPx;
+        return (
+          "<div class=\"milestone-line\" style=\"left:" + left + "px; height:" + totalHeight + "px\"></div>" +
+          "<div class=\"milestone-label\" style=\"left:" + left + "px\">" + escapeHtml(milestone.label) + "</div>"
+        );
+      })
+      .join("");
+
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
       "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
       gridLines.join("") +
       rows +
       todayLine +
+      milestoneMarkers +
       "</div>";
   }
 
@@ -759,7 +1146,18 @@ body {
   function bindEvents() {
     document.getElementById("project-select").addEventListener("change", async (event) => {
       currentProjectId = event.target.value ? Number(event.target.value) : null;
+      const project = currentProjectId === null ? null : await getProjectById(currentProjectId);
+      currentProjectLocked = Boolean(project && project.locked);
+      renderLockUI();
       await renderMainArea();
+    });
+
+    document.getElementById("btn-toggle-lock").addEventListener("click", async () => {
+      if (currentProjectId === null) return;
+      const nextLocked = !currentProjectLocked;
+      await setProjectLocked(currentProjectId, nextLocked);
+      currentProjectLocked = nextLocked;
+      renderLockUI();
     });
 
     document.getElementById("btn-new-project").addEventListener("click", async () => {
@@ -780,6 +1178,7 @@ body {
     });
 
     document.getElementById("btn-save-edit-project").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
       const name = document.getElementById("edit-project-name").value.trim();
       const description = document.getElementById("edit-project-description").value;
       if (!name) {
@@ -792,7 +1191,7 @@ body {
     });
 
     document.getElementById("btn-delete-project").addEventListener("click", async () => {
-      if (currentProjectId === null) return;
+      if (currentProjectId === null || currentProjectLocked) return;
       const ok = window.confirm("選択中のプロジェクトを削除しますか？");
       if (!ok) return;
       await deleteProject(currentProjectId);
@@ -801,8 +1200,8 @@ body {
       await renderMainArea();
     });
 
-    document.getElementById("btn-add-schedule").addEventListener("click", () => {
-      openScheduleAddModal();
+    document.getElementById("btn-add-schedule").addEventListener("click", async () => {
+      await openScheduleAddModal();
     });
 
     document.getElementById("btn-cancel-add-schedule").addEventListener("click", () => {
@@ -810,9 +1209,11 @@ body {
     });
 
     document.getElementById("btn-confirm-add-schedule").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
       const title = document.getElementById("schedule-add-title").value.trim();
       const startDate = document.getElementById("schedule-add-start-date").value;
       const endDate = document.getElementById("schedule-add-end-date").value;
+      const parentIdValue = document.getElementById("schedule-add-parent").value;
 
       if (!title) {
         window.alert("作業内容を入力してください");
@@ -832,14 +1233,87 @@ body {
         title: title,
         startDate: startDate,
         endDate: endDate,
+        parentId: parentIdValue ? Number(parentIdValue) : null,
       });
       closeScheduleAddModal();
       await renderMainArea();
     });
 
+    document.getElementById("schedule-table-container").addEventListener("click", async (event) => {
+      const toggle = event.target.closest(".toggle-arrow");
+      if (!toggle) return;
+
+      const id = Number(toggle.dataset.toggleId);
+      const items = await getScheduleItemsByProject(currentProjectId);
+      const item = items.find((i) => i.id === id);
+      await setScheduleItemCollapsed(id, !item.collapsed);
+      await renderMainArea();
+    });
+
+    document.getElementById("btn-expand-all").addEventListener("click", async () => {
+      if (currentProjectId === null) return;
+      await expandAllScheduleItems(currentProjectId);
+      await renderMainArea();
+    });
+
+    document.getElementById("btn-milestones").addEventListener("click", async () => {
+      await openMilestoneModal();
+    });
+
+    document.getElementById("btn-close-milestone-modal").addEventListener("click", () => {
+      closeMilestoneModal();
+    });
+
+    document.getElementById("btn-add-milestone").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
+      const date = document.getElementById("milestone-date").value;
+      const label = document.getElementById("milestone-label").value.trim();
+
+      if (!isValidDateStr(date)) {
+        window.alert("日付を選択してください");
+        return;
+      }
+      if (!label) {
+        window.alert("ラベルを入力してください");
+        return;
+      }
+
+      await addMilestone({ projectId: currentProjectId, date: date, label: label });
+      document.getElementById("milestone-date").value = "";
+      document.getElementById("milestone-label").value = "";
+      await renderMilestoneList();
+      await renderGanttChart();
+    });
+
+    document.getElementById("milestone-list").addEventListener("click", async (event) => {
+      if (currentProjectLocked) return;
+      const deleteButton = event.target.closest("[data-delete-milestone-id]");
+      if (!deleteButton) return;
+
+      const id = Number(deleteButton.dataset.deleteMilestoneId);
+      await deleteMilestone(id);
+      await renderMilestoneList();
+      await renderGanttChart();
+    });
+
     document.getElementById("period-select").addEventListener("change", async (event) => {
       currentPeriod = event.target.value;
       await renderGanttChart();
+    });
+
+    document.getElementById("col-toggle-start").addEventListener("change", async (event) => {
+      visibleColumns.startDate = event.target.checked;
+      await renderScheduleTable();
+    });
+
+    document.getElementById("col-toggle-end").addEventListener("change", async (event) => {
+      visibleColumns.endDate = event.target.checked;
+      await renderScheduleTable();
+    });
+
+    document.getElementById("col-toggle-status").addEventListener("change", async (event) => {
+      visibleColumns.status = event.target.checked;
+      await renderScheduleTable();
     });
 
     document.getElementById("btn-today").addEventListener("click", async () => {
