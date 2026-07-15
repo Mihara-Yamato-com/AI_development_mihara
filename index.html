@@ -820,6 +820,9 @@ button:disabled {
   <select id="project-select"></select>
   <button id="btn-new-project">新規プロジェクト作成</button>
   <button id="btn-delete-project">プロジェクト削除</button>
+  <button id="btn-export-json">JSON出力</button>
+  <button id="btn-import-json">データ取込</button>
+  <input id="import-json-file-input" type="file" accept="application/json" hidden>
 </header>
 
 <div class="toolbar">
@@ -2082,11 +2085,12 @@ button:disabled {
   }
 
   /**
-   * 選択中プロジェクトの現在の状態(プロジェクト情報+紐づく全データ)をスナップショットとして保存する
+   * 指定プロジェクトの現在の状態(プロジェクト情報+紐づく全データ)を1つのオブジェクトに集約する。
+   * スナップショット保存・JSON出力の両方から共通で使う。
    * @param {number} projectId
-   * @returns {Promise<number>} 追加されたスナップショットのid
+   * @returns {Promise<Object>}
    */
-  async function createSnapshot(projectId) {
+  async function collectProjectData(projectId) {
     const project = await getProjectById(projectId);
     const scheduleItems = await getScheduleItemsByProject(projectId);
     const milestones = await getMilestonesByProject(projectId);
@@ -2096,7 +2100,7 @@ button:disabled {
     const mindMapNodes = await getMindMapNodesByProject(projectId);
     const commentsByItem = await Promise.all(scheduleItems.map((item) => getCommentsByScheduleItem(item.id)));
 
-    const data = {
+    return {
       project: { name: project.name, description: project.description, locked: project.locked },
       scheduleItems: scheduleItems,
       milestones: milestones,
@@ -2106,6 +2110,15 @@ button:disabled {
       quickMemos: quickMemos,
       mindMapNodes: mindMapNodes,
     };
+  }
+
+  /**
+   * 選択中プロジェクトの現在の状態(プロジェクト情報+紐づく全データ)をスナップショットとして保存する
+   * @param {number} projectId
+   * @returns {Promise<number>} 追加されたスナップショットのid
+   */
+  async function createSnapshot(projectId) {
+    const data = await collectProjectData(projectId);
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_SNAPSHOTS, "readwrite");
@@ -2189,54 +2202,45 @@ button:disabled {
   }
 
   /**
-   * 指定スナップショットの内容で、選択中プロジェクトの状態を丸ごと置き換える。
-   * 現在のプロジェクトに紐づく全データを削除してから、スナップショットの内容を再投入する。
+   * 集約済みのプロジェクトデータ(collectProjectDataの戻り値と同じ形)を、指定プロジェクトへ再投入する。
    * scheduleItems/mindMapNodesは親子関係(parentId)、commentsはscheduleItemIdを
-   * 新しいidに付け替えてから復元する。
-   * @param {number} snapshotId
+   * 新しいidに付け替えてから投入する。スナップショット復元・JSON取込の両方から使う。
+   * @param {number} projectId
+   * @param {Object} data
    * @returns {Promise<void>}
    */
-  async function restoreSnapshotById(snapshotId) {
-    const snapshot = await getSnapshotById(snapshotId);
-    if (!snapshot) return;
-    const data = snapshot.data;
-    const projectId = currentProjectId;
-
-    await clearProjectData(projectId);
-    await updateProject(projectId, { name: data.project.name, description: data.project.description });
-    await setProjectLocked(projectId, Boolean(data.project.locked));
-
+  async function insertProjectData(projectId, data) {
     const scheduleIdMap = {};
-    for (const item of data.scheduleItems) {
+    for (const item of data.scheduleItems || []) {
       const newId = await insertRawRecord(STORE_SCHEDULE_ITEMS, Object.assign({}, item, { projectId: projectId }));
       scheduleIdMap[item.id] = newId;
     }
-    for (const item of data.scheduleItems) {
+    for (const item of data.scheduleItems || []) {
       if (item.parentId) {
         await updateScheduleItem(scheduleIdMap[item.id], { parentId: scheduleIdMap[item.parentId] || null });
       }
     }
 
-    for (const milestone of data.milestones) {
+    for (const milestone of data.milestones || []) {
       await insertRawRecord(STORE_MILESTONES, Object.assign({}, milestone, { projectId: projectId }));
     }
 
-    for (const task of data.tasks) {
+    for (const task of data.tasks || []) {
       await insertRawRecord(STORE_TASKS, Object.assign({}, task, { projectId: projectId }));
     }
 
-    for (const comment of data.comments) {
+    for (const comment of data.comments || []) {
       const newScheduleItemId = scheduleIdMap[comment.scheduleItemId];
       if (newScheduleItemId) {
         await insertRawRecord(STORE_COMMENTS, Object.assign({}, comment, { scheduleItemId: newScheduleItemId }));
       }
     }
 
-    for (const memo of data.memos) {
+    for (const memo of data.memos || []) {
       await insertRawRecord(STORE_MEMOS, Object.assign({}, memo, { projectId: projectId }));
     }
 
-    for (const quickMemo of data.quickMemos) {
+    for (const quickMemo of data.quickMemos || []) {
       await insertRawRecord(STORE_QUICK_MEMOS, Object.assign({}, quickMemo, { projectId: projectId }));
     }
 
@@ -2250,6 +2254,101 @@ button:disabled {
         await updateMindMapNode(mindMapIdMap[node.id], { parentId: mindMapIdMap[node.parentId] || null });
       }
     }
+  }
+
+  /**
+   * 指定スナップショットの内容で、選択中プロジェクトの状態を丸ごと置き換える。
+   * 現在のプロジェクトに紐づく全データを削除してから、スナップショットの内容を再投入する。
+   * @param {number} snapshotId
+   * @returns {Promise<void>}
+   */
+  async function restoreSnapshotById(snapshotId) {
+    const snapshot = await getSnapshotById(snapshotId);
+    if (!snapshot) return;
+    const data = snapshot.data;
+    const projectId = currentProjectId;
+
+    await clearProjectData(projectId);
+    await updateProject(projectId, { name: data.project.name, description: data.project.description });
+    await setProjectLocked(projectId, Boolean(data.project.locked));
+    await insertProjectData(projectId, data);
+  }
+
+  /* ---- Sub-section: JSON Export/Import ---- */
+
+  /**
+   * ファイル名として使えない文字を取り除く
+   * @param {string} name
+   * @returns {string}
+   */
+  function sanitizeFileName(name) {
+    return name.replace(/[\\/:*?"<>|]/g, "_");
+  }
+
+  /**
+   * DateをYYYYMMDD_HHMM形式の文字列にする(ファイル名用)
+   * @param {Date} date
+   * @returns {string}
+   */
+  function formatDateForFileName(date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate()) +
+      "_" + pad(date.getHours()) + pad(date.getMinutes())
+    );
+  }
+
+  /**
+   * 選択中プロジェクトのデータをJSONファイルとして書き出し、ブラウザにダウンロードさせる
+   * @param {number} projectId
+   * @returns {Promise<void>}
+   */
+  async function exportProjectAsJson(projectId) {
+    const data = await collectProjectData(projectId);
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = sanitizeFileName(data.project.name) + "_" + formatDateForFileName(new Date()) + ".json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * JSONファイルの内容を、新規プロジェクトとして取り込む。
+   * 既存プロジェクトを壊さないよう、常に新規プロジェクトを作成してそこへ投入する。
+   * @param {File} file
+   * @returns {Promise<void>}
+   */
+  async function importProjectFromJsonFile(file) {
+    let data;
+    try {
+      const text = await file.text();
+      data = JSON.parse(text);
+    } catch (error) {
+      window.alert("JSONファイルを読み込めませんでした。ファイルの形式を確認してください。");
+      return;
+    }
+    if (!data || !data.project || typeof data.project.name !== "string") {
+      window.alert("対応していないファイル形式です。GantForgeから出力したJSONファイルを指定してください。");
+      return;
+    }
+
+    const newProjectId = await addProject(data.project.name);
+    await updateProject(newProjectId, {
+      name: data.project.name,
+      description: typeof data.project.description === "string" ? data.project.description : "",
+    });
+    await setProjectLocked(newProjectId, Boolean(data.project.locked));
+    await insertProjectData(newProjectId, data);
+
+    currentProjectId = newProjectId;
+    await refreshProjectSelect();
+    await renderMainArea();
+    await addChangeLog(newProjectId, "JSONファイルからデータを取り込みました");
   }
 
   /* ---- Sub-section: Mind Map ---- */
@@ -4006,6 +4105,27 @@ button:disabled {
       isExpandAllToggled = false;
       renderExpandAllButton();
       await renderMainArea();
+    });
+
+    document.getElementById("btn-export-json").addEventListener("click", async () => {
+      if (currentProjectId === null) {
+        window.alert("先にプロジェクトを作成・選択してください");
+        return;
+      }
+      await exportProjectAsJson(currentProjectId);
+    });
+
+    document.getElementById("btn-import-json").addEventListener("click", () => {
+      document.getElementById("import-json-file-input").click();
+    });
+
+    document.getElementById("import-json-file-input").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      await importProjectFromJsonFile(file);
+      isExpandAllToggled = false;
+      renderExpandAllButton();
     });
 
     document.getElementById("btn-add-schedule").addEventListener("click", async () => {
