@@ -264,6 +264,38 @@ body {
   margin-top: 8px;
 }
 
+.modal-box hr {
+  width: 100%;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 4px 0;
+}
+
+.modal-box h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.comment-list {
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.comment-list-item {
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.comment-list-item .comment-timestamp {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+}
+
 .milestone-list-item {
   display: flex;
   align-items: center;
@@ -674,6 +706,13 @@ button:disabled {
       <button id="btn-cancel-edit-schedule">キャンセル</button>
       <button id="btn-save-edit-schedule">保存</button>
     </div>
+    <hr>
+    <h3>コメント</h3>
+    <div id="schedule-comment-list" class="comment-list"></div>
+    <textarea id="schedule-comment-input" rows="2" placeholder="コメントを入力"></textarea>
+    <div class="modal-actions">
+      <button id="btn-send-comment">送信</button>
+    </div>
   </div>
 </div>
 
@@ -772,6 +811,8 @@ button:disabled {
   const INDEX_QUICK_MEMOS_BY_PROJECT = "by_projectId";
   const STORE_TASKS = "tasks";
   const INDEX_TASKS_BY_PROJECT = "by_projectId";
+  const STORE_COMMENTS = "comments";
+  const INDEX_COMMENTS_BY_SCHEDULE_ITEM = "by_scheduleItemId";
 
   const STATUS_NOT_STARTED = "未着手";
   const STATUS_IN_PROGRESS = "進行中";
@@ -901,6 +942,16 @@ button:disabled {
             autoIncrement: true,
           });
           taskStore.createIndex(INDEX_TASKS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_COMMENTS)) {
+          const commentStore = database.createObjectStore(STORE_COMMENTS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          commentStore.createIndex(INDEX_COMMENTS_BY_SCHEDULE_ITEM, "scheduleItemId", {
             unique: false,
           });
         }
@@ -1099,11 +1150,12 @@ button:disabled {
   }
 
   /**
-   * スケジュール項目を削除する
+   * スケジュール項目を削除する（紐づくコメントも合わせて削除する）
    * @param {number} id
    * @returns {Promise<void>}
    */
-  function deleteScheduleItem(id) {
+  async function deleteScheduleItem(id) {
+    await deleteCommentsByScheduleItem(id);
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
       const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
@@ -1615,6 +1667,68 @@ button:disabled {
     flushList();
 
     return htmlParts.join("") || "<p><em>(内容がありません)</em></p>";
+  }
+
+  /* ---- Sub-section: Comments ---- */
+
+  /**
+   * 作業(スケジュール項目)にコメントを1件追加する
+   * @param {number} scheduleItemId
+   * @param {string} text
+   * @returns {Promise<number>} 追加されたコメントのid
+   */
+  function addComment(scheduleItemId, text) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_COMMENTS, "readwrite");
+      const store = tx.objectStore(STORE_COMMENTS);
+      const request = store.add({
+        scheduleItemId: scheduleItemId,
+        text: text,
+        timestamp: Date.now(),
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定した作業のコメントを、古い順に取得する
+   * @param {number} scheduleItemId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getCommentsByScheduleItem(scheduleItemId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_COMMENTS, "readonly");
+      const store = tx.objectStore(STORE_COMMENTS);
+      const index = store.index(INDEX_COMMENTS_BY_SCHEDULE_ITEM);
+      const request = index.getAll(IDBKeyRange.only(scheduleItemId));
+      request.onsuccess = (event) => {
+        const comments = event.target.result;
+        comments.sort((a, b) => a.timestamp - b.timestamp);
+        resolve(comments);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定した作業に紐づくコメントを全て削除する（作業自体の削除時に使う）
+   * @param {number} scheduleItemId
+   * @returns {Promise<void>}
+   */
+  function deleteCommentsByScheduleItem(scheduleItemId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_COMMENTS, "readwrite");
+      const store = tx.objectStore(STORE_COMMENTS);
+      const index = store.index(INDEX_COMMENTS_BY_SCHEDULE_ITEM);
+      const request = index.getAllKeys(IDBKeyRange.only(scheduleItemId));
+      request.onsuccess = (event) => {
+        event.target.result.forEach((key) => store.delete(key));
+      };
+      request.onerror = (event) => reject(event.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = (event) => reject(event.target.error);
+    });
   }
 
   /* ==== Section: UI描画 ==== */
@@ -2130,14 +2244,20 @@ button:disabled {
   /* ---- Sub-section: Schedule Edit Modal ---- */
 
   /**
-   * スケジュール編集モーダルを、対象項目の現在値で開く
+   * スケジュール編集モーダルを、対象項目の現在値・コメント一覧を表示した状態で開く
    * @param {Object} item
+   * @returns {Promise<void>}
    */
-  function openScheduleEditModal(item) {
+  async function openScheduleEditModal(item) {
     editingScheduleItemId = item.id;
     document.getElementById("schedule-edit-title").value = item.title;
     document.getElementById("schedule-edit-start-date").value = item.startDate;
     document.getElementById("schedule-edit-end-date").value = item.endDate;
+    document.getElementById("schedule-comment-input").value = "";
+    document.getElementById("btn-save-edit-schedule").disabled = currentProjectLocked;
+    document.getElementById("schedule-comment-input").disabled = currentProjectLocked;
+    document.getElementById("btn-send-comment").disabled = currentProjectLocked;
+    await renderCommentList(item.id);
     document.getElementById("schedule-edit-modal").hidden = false;
   }
 
@@ -2147,6 +2267,32 @@ button:disabled {
   function closeScheduleEditModal() {
     editingScheduleItemId = null;
     document.getElementById("schedule-edit-modal").hidden = true;
+  }
+
+  /**
+   * スケジュール編集モーダル内のコメント一覧を再描画する（古い順）
+   * @param {number} scheduleItemId
+   * @returns {Promise<void>}
+   */
+  async function renderCommentList(scheduleItemId) {
+    const comments = await getCommentsByScheduleItem(scheduleItemId);
+    const container = document.getElementById("schedule-comment-list");
+
+    if (comments.length === 0) {
+      container.innerHTML = "<p>コメントがありません</p>";
+      return;
+    }
+
+    container.innerHTML = comments
+      .map((comment) => {
+        return (
+          "<div class=\"comment-list-item\">" +
+          "<span class=\"comment-timestamp\">" + escapeHtml(formatTimestamp(comment.timestamp)) + "</span>" +
+          escapeHtml(comment.text) +
+          "</div>"
+        );
+      })
+      .join("");
   }
 
   /* ---- Sub-section: Schedule Table ---- */
@@ -2212,7 +2358,7 @@ button:disabled {
           "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
           startCell + endCell + statusCell +
           "<td class=\"row-actions\">" +
-          "<button class=\"btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\"" + disabledAttr + ">編集</button>" +
+          "<button class=\"btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\">編集</button>" +
           "<button class=\"btn-row-delete\" data-item-id=\"" + item.id + "\" title=\"削除\"" + disabledAttr + ">削除</button>" +
           "<button class=\"btn-row-move-up\" data-item-id=\"" + item.id + "\" title=\"上へ\"" + (isFirst || currentProjectLocked ? " disabled" : "") + ">▲</button>" +
           "<button class=\"btn-row-move-down\" data-item-id=\"" + item.id + "\" title=\"下へ\"" + (isLast || currentProjectLocked ? " disabled" : "") + ">▼</button>" +
@@ -2706,14 +2852,15 @@ button:disabled {
     document.getElementById("schedule-table-container").addEventListener("click", async (event) => {
       const button = event.target.closest("button");
       if (!button || !button.dataset.itemId) return;
-      if (currentProjectLocked) return;
       const itemId = Number(button.dataset.itemId);
 
       if (button.classList.contains("btn-row-edit")) {
         const item = await getScheduleItemById(itemId);
-        openScheduleEditModal(item);
+        await openScheduleEditModal(item);
         return;
       }
+
+      if (currentProjectLocked) return;
 
       if (button.classList.contains("btn-row-delete")) {
         const ok = window.confirm("このスケジュール項目を削除しますか？");
@@ -2744,6 +2891,7 @@ button:disabled {
     });
 
     document.getElementById("btn-save-edit-schedule").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
       const title = document.getElementById("schedule-edit-title").value.trim();
       const startDate = document.getElementById("schedule-edit-start-date").value;
       const endDate = document.getElementById("schedule-edit-end-date").value;
@@ -2765,6 +2913,20 @@ button:disabled {
       closeScheduleEditModal();
       await renderMainArea();
       await addChangeLog(currentProjectId, "作業「" + title + "」を編集しました");
+    });
+
+    document.getElementById("btn-send-comment").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
+      const text = document.getElementById("schedule-comment-input").value.trim();
+      if (!text) {
+        window.alert("コメントを入力してください");
+        return;
+      }
+      const item = await getScheduleItemById(editingScheduleItemId);
+      await addComment(editingScheduleItemId, text);
+      document.getElementById("schedule-comment-input").value = "";
+      await renderCommentList(editingScheduleItemId);
+      await addChangeLog(currentProjectId, "作業「" + item.title + "」にコメントを追加しました");
     });
 
     document.getElementById("btn-expand-all").addEventListener("click", async () => {
