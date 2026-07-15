@@ -690,10 +690,15 @@ button:disabled {
   border: 1px solid #e5e7eb;
   border-radius: 4px;
   background: #fafafa;
+  cursor: grab;
 }
 
 .mindmap-canvas-wrapper:focus {
   outline: 2px solid #93c5fd;
+}
+
+.mindmap-canvas-wrapper.is-panning {
+  cursor: grabbing;
 }
 
 .mindmap-canvas {
@@ -710,8 +715,8 @@ button:disabled {
 }
 
 .mindmap-connector line {
-  stroke: #9ca3af;
-  stroke-width: 2;
+  stroke: #6b7280;
+  stroke-width: 2.5;
 }
 
 .mindmap-node {
@@ -773,6 +778,10 @@ button:disabled {
   flex-direction: column;
   gap: 2px;
   z-index: 100;
+}
+
+.mindmap-context-menu[hidden] {
+  display: none;
 }
 
 .mindmap-context-menu button {
@@ -1218,6 +1227,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   let mindMapContextMenuNodeId = null;
   let mindMapEditingNodeId = null;
   let mindMapDragState = null;
+  let mindMapPanState = null;
   let mindMapZoomScale = 1;
 
   document.addEventListener("DOMContentLoaded", init);
@@ -3721,6 +3731,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     mindMapDragState = null;
   }
 
+  /**
+   * マインドマップの背面ドラッグによる視点移動(パン)を開始する
+   * @param {PointerEvent} event
+   */
+  function startMindMapPan(event) {
+    const wrapper = document.getElementById("mindmap-canvas-wrapper");
+    mindMapPanState = {
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startScrollLeft: wrapper.scrollLeft,
+      startScrollTop: wrapper.scrollTop,
+    };
+    wrapper.classList.add("is-panning");
+    window.addEventListener("pointermove", onMindMapPanMove);
+    window.addEventListener("pointerup", onMindMapPanUp);
+  }
+
+  /**
+   * パン中のpointermoveハンドラ。スクロール位置を直接更新する
+   * @param {PointerEvent} event
+   */
+  function onMindMapPanMove(event) {
+    if (!mindMapPanState) return;
+    const wrapper = document.getElementById("mindmap-canvas-wrapper");
+    const dx = event.clientX - mindMapPanState.startClientX;
+    const dy = event.clientY - mindMapPanState.startClientY;
+    wrapper.scrollLeft = mindMapPanState.startScrollLeft - dx;
+    wrapper.scrollTop = mindMapPanState.startScrollTop - dy;
+  }
+
+  /**
+   * パン終了時のpointerupハンドラ
+   */
+  function onMindMapPanUp() {
+    window.removeEventListener("pointermove", onMindMapPanMove);
+    window.removeEventListener("pointerup", onMindMapPanUp);
+    document.getElementById("mindmap-canvas-wrapper").classList.remove("is-panning");
+    mindMapPanState = null;
+  }
+
   /* ---- Sub-section: Schedule Edit Modal ---- */
 
   /**
@@ -4780,7 +4830,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     document.getElementById("mindmap-canvas-wrapper").addEventListener("pointerdown", (event) => {
       const nodeEl = event.target.closest(".mindmap-node");
-      if (!nodeEl) return;
+      if (!nodeEl) {
+        if (event.button !== 0) return;
+        startMindMapPan(event);
+        return;
+      }
       startMindMapNodeDrag(event, Number(nodeEl.dataset.nodeId));
     });
 
