@@ -417,6 +417,39 @@ button:disabled {
   flex-direction: column;
 }
 
+/* ==== Section: Task Management Panel ==== */
+.task-panel {
+  width: 700px;
+}
+
+.task-add-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.task-add-row input {
+  flex: 1;
+  font-size: 14px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+.task-board {
+  display: flex;
+  gap: 8px;
+}
+
+.kanban-column {
+  flex: 1;
+  min-width: 0;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
 #memo-title-input {
   font-size: 14px;
   padding: 4px 6px;
@@ -506,6 +539,42 @@ button:disabled {
   font-size: 11px;
   flex: 0 0 auto;
 }
+
+.kanban-column-header {
+  font-size: 13px;
+  font-weight: bold;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.kanban-column-body {
+  flex: 1;
+  padding: 6px;
+  min-height: 80px;
+}
+
+.kanban-column-body.drag-over {
+  background: #e0e7ff;
+}
+
+.kanban-card {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.kanban-card .btn-task-edit {
+  font-size: 11px;
+  padding: 1px 4px;
+}
 </style>
 </head>
 <body>
@@ -537,6 +606,7 @@ button:disabled {
   <button id="btn-history">変更履歴</button>
   <button id="btn-memos">メモ</button>
   <button id="btn-quick-memos">即時メモ</button>
+  <button id="btn-tasks">タスク管理</button>
 </div>
 
 <main class="main-area">
@@ -655,13 +725,40 @@ button:disabled {
   <div id="quick-memo-list" class="side-panel-body"></div>
 </aside>
 
+<aside id="task-panel" class="side-panel task-panel" hidden>
+  <div class="side-panel-header">
+    <h2>タスク管理</h2>
+    <button id="btn-close-task-panel">閉じる</button>
+  </div>
+  <div class="task-add-row">
+    <input id="task-add-title" type="text" placeholder="新しいタスク">
+    <button id="btn-add-task">追加</button>
+  </div>
+  <div id="task-board" class="side-panel-body task-board"></div>
+</aside>
+
+<div id="task-edit-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>タスク編集</h2>
+    <label for="task-edit-title">タスク内容</label>
+    <input id="task-edit-title" type="text">
+    <label for="task-edit-status">状態</label>
+    <select id="task-edit-status"></select>
+    <div class="modal-actions">
+      <button id="btn-delete-task">削除</button>
+      <button id="btn-cancel-edit-task">キャンセル</button>
+      <button id="btn-save-edit-task">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 7;
+  const DB_VERSION = 8;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
@@ -673,6 +770,8 @@ button:disabled {
   const INDEX_MEMOS_BY_PROJECT = "by_projectId";
   const STORE_QUICK_MEMOS = "quickMemos";
   const INDEX_QUICK_MEMOS_BY_PROJECT = "by_projectId";
+  const STORE_TASKS = "tasks";
+  const INDEX_TASKS_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
   const STATUS_IN_PROGRESS = "進行中";
@@ -696,6 +795,7 @@ button:disabled {
   let currentMemoId = null;
   let memoViewMode = "edit";
   let memoSaveTimer = null;
+  let editingTaskId = null;
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -791,6 +891,16 @@ button:disabled {
             autoIncrement: true,
           });
           quickMemoStore.createIndex(INDEX_QUICK_MEMOS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_TASKS)) {
+          const taskStore = database.createObjectStore(STORE_TASKS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          taskStore.createIndex(INDEX_TASKS_BY_PROJECT, "projectId", {
             unique: false,
           });
         }
@@ -1259,6 +1369,65 @@ button:disabled {
     });
   }
 
+  /* ---- Sub-section: Tasks ---- */
+
+  /**
+   * タスクを新規追加する（未着手として登録される）
+   * @param {Object} task
+   * @param {number} task.projectId
+   * @param {string} task.title
+   * @returns {Promise<number>} 追加されたタスクのid
+   */
+  function addTask(task) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_TASKS, "readwrite");
+      const store = tx.objectStore(STORE_TASKS);
+      const request = store.add({
+        projectId: task.projectId,
+        title: task.title,
+        status: STATUS_NOT_STARTED,
+        order: Date.now(),
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトのタスクを、登録順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getTasksByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_TASKS, "readonly");
+      const store = tx.objectStore(STORE_TASKS);
+      const index = store.index(INDEX_TASKS_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const tasks = event.target.result;
+        tasks.sort((a, b) => a.order - b.order);
+        resolve(tasks);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * idを指定してタスクを1件取得する
+   * @param {number} id
+   * @returns {Promise<Object>}
+   */
+  function getTaskById(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_TASKS, "readonly");
+      const store = tx.objectStore(STORE_TASKS);
+      const request = store.get(id);
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
   /**
    * メモの内容を更新する
    * @param {number} id
@@ -1295,6 +1464,44 @@ button:disabled {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_MEMOS, "readwrite");
       const store = tx.objectStore(STORE_MEMOS);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * タスクの内容を更新する
+   * @param {number} id
+   * @param {Object} changes - title/statusのうち更新したい項目
+   * @returns {Promise<void>}
+   */
+  function updateTask(id, changes) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_TASKS, "readwrite");
+      const store = tx.objectStore(STORE_TASKS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const task = getRequest.result;
+        Object.assign(task, changes);
+        const putRequest = store.put(task);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * タスクを削除する
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteTask(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_TASKS, "readwrite");
+      const store = tx.objectStore(STORE_TASKS);
       const request = store.delete(id);
       request.onsuccess = () => resolve();
       request.onerror = (event) => reject(event.target.error);
@@ -1462,7 +1669,7 @@ button:disabled {
     lockButton.disabled = currentProjectId === null;
     lockButton.classList.toggle("is-locked", currentProjectLocked);
 
-    ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label", "btn-new-memo", "quick-memo-input", "btn-add-quick-memo"].forEach((id) => {
+    ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label", "btn-new-memo", "quick-memo-input", "btn-add-quick-memo", "btn-add-task", "task-add-title"].forEach((id) => {
       document.getElementById(id).disabled = currentProjectLocked;
     });
   }
@@ -1839,6 +2046,85 @@ button:disabled {
         );
       })
       .join("");
+  }
+
+  /* ---- Sub-section: Task Management Panel ---- */
+
+  /**
+   * タスク管理パネルを、選択中プロジェクトのタスク一覧を表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openTaskPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    document.getElementById("task-add-title").value = "";
+    await renderTaskBoard();
+    document.getElementById("task-panel").hidden = false;
+  }
+
+  /**
+   * タスク管理パネルを閉じる
+   */
+  function closeTaskPanel() {
+    document.getElementById("task-panel").hidden = true;
+  }
+
+  /**
+   * タスク管理パネルのカンバン(未着手/進行中/完了)を再描画する
+   * @returns {Promise<void>}
+   */
+  async function renderTaskBoard() {
+    const tasks = await getTasksByProject(currentProjectId);
+    const container = document.getElementById("task-board");
+
+    container.innerHTML = STATUS_OPTIONS
+      .map((status) => {
+        const cards = tasks
+          .filter((task) => task.status === status)
+          .map((task) => {
+            return (
+              "<div class=\"kanban-card\" draggable=\"" + (currentProjectLocked ? "false" : "true") + "\" data-task-id=\"" + task.id + "\">" +
+              "<span>" + escapeHtml(task.title) + "</span>" +
+              "<button class=\"btn-task-edit\" data-task-id=\"" + task.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">編集</button>" +
+              "</div>"
+            );
+          })
+          .join("");
+        return (
+          "<div class=\"kanban-column\">" +
+          "<div class=\"kanban-column-header\">" + escapeHtml(status) + "</div>" +
+          "<div class=\"kanban-column-body\" data-status=\"" + escapeHtml(status) + "\">" + cards + "</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  /**
+   * タスク編集モーダルを、対象タスクの現在値で開く
+   * @param {Object} task
+   */
+  function openTaskEditModal(task) {
+    editingTaskId = task.id;
+    document.getElementById("task-edit-title").value = task.title;
+    const statusSelect = document.getElementById("task-edit-status");
+    statusSelect.innerHTML = STATUS_OPTIONS
+      .map((value) => {
+        const selected = value === task.status ? " selected" : "";
+        return "<option value=\"" + escapeHtml(value) + "\"" + selected + ">" + escapeHtml(value) + "</option>";
+      })
+      .join("");
+    document.getElementById("task-edit-modal").hidden = false;
+  }
+
+  /**
+   * タスク編集モーダルを閉じる
+   */
+  function closeTaskEditModal() {
+    editingTaskId = null;
+    document.getElementById("task-edit-modal").hidden = true;
   }
 
   /* ---- Sub-section: Schedule Edit Modal ---- */
@@ -2608,6 +2894,100 @@ button:disabled {
       await deleteQuickMemo(Number(deleteButton.dataset.quickMemoId));
       await renderQuickMemoList();
       await addChangeLog(currentProjectId, "即時メモを削除しました");
+    });
+
+    document.getElementById("btn-tasks").addEventListener("click", async () => {
+      await openTaskPanel();
+    });
+
+    document.getElementById("btn-close-task-panel").addEventListener("click", () => {
+      closeTaskPanel();
+    });
+
+    document.getElementById("btn-add-task").addEventListener("click", async () => {
+      if (currentProjectLocked || currentProjectId === null) return;
+      const title = document.getElementById("task-add-title").value.trim();
+      if (!title) {
+        window.alert("タスク内容を入力してください");
+        return;
+      }
+      await addTask({ projectId: currentProjectId, title: title });
+      document.getElementById("task-add-title").value = "";
+      await renderTaskBoard();
+      await addChangeLog(currentProjectId, "タスク「" + title + "」を追加しました");
+    });
+
+    document.getElementById("task-board").addEventListener("click", async (event) => {
+      const editButton = event.target.closest(".btn-task-edit");
+      if (!editButton) return;
+      if (currentProjectLocked) return;
+      const task = await getTaskById(Number(editButton.dataset.taskId));
+      openTaskEditModal(task);
+    });
+
+    document.getElementById("task-board").addEventListener("dragstart", (event) => {
+      const card = event.target.closest(".kanban-card");
+      if (!card) return;
+      event.dataTransfer.setData("text/plain", card.dataset.taskId);
+    });
+
+    document.getElementById("task-board").addEventListener("dragover", (event) => {
+      const columnBody = event.target.closest(".kanban-column-body");
+      if (!columnBody) return;
+      event.preventDefault();
+      columnBody.classList.add("drag-over");
+    });
+
+    document.getElementById("task-board").addEventListener("dragleave", (event) => {
+      const columnBody = event.target.closest(".kanban-column-body");
+      if (!columnBody) return;
+      columnBody.classList.remove("drag-over");
+    });
+
+    document.getElementById("task-board").addEventListener("drop", async (event) => {
+      const columnBody = event.target.closest(".kanban-column-body");
+      if (!columnBody) return;
+      event.preventDefault();
+      columnBody.classList.remove("drag-over");
+      if (currentProjectLocked) return;
+
+      const taskId = Number(event.dataTransfer.getData("text/plain"));
+      const newStatus = columnBody.dataset.status;
+      const task = await getTaskById(taskId);
+      if (!task || task.status === newStatus) return;
+
+      await updateTask(taskId, { status: newStatus });
+      await renderTaskBoard();
+      await addChangeLog(currentProjectId, "タスク「" + task.title + "」の状態を「" + newStatus + "」に変更しました");
+    });
+
+    document.getElementById("btn-cancel-edit-task").addEventListener("click", () => {
+      closeTaskEditModal();
+    });
+
+    document.getElementById("btn-save-edit-task").addEventListener("click", async () => {
+      const title = document.getElementById("task-edit-title").value.trim();
+      const status = document.getElementById("task-edit-status").value;
+      if (!title) {
+        window.alert("タスク内容を入力してください");
+        return;
+      }
+      await updateTask(editingTaskId, { title: title, status: status });
+      closeTaskEditModal();
+      await renderTaskBoard();
+      await addChangeLog(currentProjectId, "タスク「" + title + "」を編集しました");
+    });
+
+    document.getElementById("btn-delete-task").addEventListener("click", async () => {
+      const ok = window.confirm("このタスクを削除しますか？");
+      if (!ok) return;
+      const task = await getTaskById(editingTaskId);
+      await deleteTask(editingTaskId);
+      closeTaskEditModal();
+      await renderTaskBoard();
+      if (task) {
+        await addChangeLog(currentProjectId, "タスク「" + task.title + "」を削除しました");
+      }
     });
 
     document.getElementById("btn-close-milestone-modal").addEventListener("click", () => {
