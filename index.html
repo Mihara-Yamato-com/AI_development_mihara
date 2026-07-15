@@ -1890,7 +1890,6 @@ button:disabled {
     const tasks = await getTasksByProject(projectId);
     const memos = await getMemosByProject(projectId);
     const quickMemos = await getQuickMemosByProject(projectId);
-    const mindMapNodes = await getMindMapNodesByProject(projectId);
     const commentsByItem = await Promise.all(scheduleItems.map((item) => getCommentsByScheduleItem(item.id)));
 
     const data = {
@@ -1901,7 +1900,6 @@ button:disabled {
       comments: commentsByItem.flat(),
       memos: memos,
       quickMemos: quickMemos,
-      mindMapNodes: mindMapNodes,
     };
 
     return new Promise((resolve, reject) => {
@@ -1982,13 +1980,12 @@ button:disabled {
     await deleteAllByProjectId(STORE_TASKS, INDEX_TASKS_BY_PROJECT, projectId);
     await deleteAllByProjectId(STORE_MEMOS, INDEX_MEMOS_BY_PROJECT, projectId);
     await deleteAllByProjectId(STORE_QUICK_MEMOS, INDEX_QUICK_MEMOS_BY_PROJECT, projectId);
-    await deleteAllByProjectId(STORE_MINDMAP_NODES, INDEX_MINDMAP_NODES_BY_PROJECT, projectId);
   }
 
   /**
    * 指定スナップショットの内容で、選択中プロジェクトの状態を丸ごと置き換える。
    * 現在のプロジェクトに紐づく全データを削除してから、スナップショットの内容を再投入する。
-   * scheduleItems/mindMapNodesは親子関係(parentId)、commentsはscheduleItemIdを
+   * scheduleItemsは親子関係(parentId)、commentsはscheduleItemIdを
    * 新しいidに付け替えてから復元する。
    * @param {number} snapshotId
    * @returns {Promise<void>}
@@ -2035,17 +2032,6 @@ button:disabled {
 
     for (const quickMemo of data.quickMemos) {
       await insertRawRecord(STORE_QUICK_MEMOS, Object.assign({}, quickMemo, { projectId: projectId }));
-    }
-
-    const mindMapIdMap = {};
-    for (const node of data.mindMapNodes) {
-      const newId = await insertRawRecord(STORE_MINDMAP_NODES, Object.assign({}, node, { projectId: projectId }));
-      mindMapIdMap[node.id] = newId;
-    }
-    for (const node of data.mindMapNodes) {
-      if (node.parentId) {
-        await updateMindMapNode(mindMapIdMap[node.id], { parentId: mindMapIdMap[node.parentId] || null });
-      }
     }
   }
 
