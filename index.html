@@ -79,6 +79,26 @@ body {
   width: 14px;
 }
 
+.schedule-table .status-select {
+  font-size: 12px;
+  padding: 2px;
+}
+
+.schedule-table .row-actions {
+  white-space: nowrap;
+}
+
+.schedule-table .row-actions button {
+  visibility: hidden;
+  font-size: 11px;
+  padding: 2px 4px;
+  margin-right: 2px;
+}
+
+.schedule-table tr.schedule-row:hover .row-actions button {
+  visibility: visible;
+}
+
 .gantt-chart {
   flex: 1;
   padding: 12px;
@@ -320,6 +340,22 @@ button:disabled {
   </div>
 </div>
 
+<div id="schedule-edit-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>スケジュール編集</h2>
+    <label for="schedule-edit-title">作業内容</label>
+    <input id="schedule-edit-title" type="text">
+    <label for="schedule-edit-start-date">開始日</label>
+    <input id="schedule-edit-start-date" type="date">
+    <label for="schedule-edit-end-date">終了日</label>
+    <input id="schedule-edit-end-date" type="date">
+    <div class="modal-actions">
+      <button id="btn-cancel-edit-schedule">キャンセル</button>
+      <button id="btn-save-edit-schedule">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -334,6 +370,9 @@ button:disabled {
   const INDEX_MILESTONES_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
+  const STATUS_IN_PROGRESS = "進行中";
+  const STATUS_DONE = "完了";
+  const STATUS_OPTIONS = [STATUS_NOT_STARTED, STATUS_IN_PROGRESS, STATUS_DONE];
 
   const PERIOD_DAY_WIDTH_PX = {
     day: 24,
@@ -347,6 +386,7 @@ button:disabled {
   let currentPeriod = "day";
   let currentProjectLocked = false;
   let visibleColumns = { startDate: true, endDate: true, status: true };
+  let editingScheduleItemId = null;
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -558,6 +598,80 @@ button:disabled {
       });
       request.onsuccess = (event) => resolve(event.target.result);
       request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * idを指定してスケジュール項目を1件取得する
+   * @param {number} id
+   * @returns {Promise<Object>}
+   */
+  function getScheduleItemById(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readonly");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const request = store.get(id);
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * スケジュール項目の内容を更新する
+   * @param {number} id
+   * @param {Object} changes - title/startDate/endDate/statusのうち更新したい項目
+   * @returns {Promise<void>}
+   */
+  function updateScheduleItem(id, changes) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const item = getRequest.result;
+        Object.assign(item, changes);
+        const putRequest = store.put(item);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * スケジュール項目を削除する
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteScheduleItem(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 2つのスケジュール項目の表示順(order)を入れ替える
+   * @param {Object} itemA
+   * @param {Object} itemB
+   * @returns {Promise<void>}
+   */
+  function swapScheduleItemOrder(itemA, itemB) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
+      const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
+      const orderA = itemA.order;
+      const orderB = itemB.order;
+      itemA.order = orderB;
+      itemB.order = orderA;
+      store.put(itemA);
+      store.put(itemB);
+      tx.oncomplete = () => resolve();
+      tx.onerror = (event) => reject(event.target.error);
     });
   }
 
@@ -894,6 +1008,28 @@ button:disabled {
       .join("");
   }
 
+  /* ---- Sub-section: Schedule Edit Modal ---- */
+
+  /**
+   * スケジュール編集モーダルを、対象項目の現在値で開く
+   * @param {Object} item
+   */
+  function openScheduleEditModal(item) {
+    editingScheduleItemId = item.id;
+    document.getElementById("schedule-edit-title").value = item.title;
+    document.getElementById("schedule-edit-start-date").value = item.startDate;
+    document.getElementById("schedule-edit-end-date").value = item.endDate;
+    document.getElementById("schedule-edit-modal").hidden = false;
+  }
+
+  /**
+   * スケジュール編集モーダルを閉じる
+   */
+  function closeScheduleEditModal() {
+    editingScheduleItemId = null;
+    document.getElementById("schedule-edit-modal").hidden = true;
+  }
+
   /* ---- Sub-section: Schedule Table ---- */
 
   /**
@@ -921,11 +1057,26 @@ button:disabled {
       "<th>作業内容</th>" +
       (visibleColumns.startDate ? "<th>開始</th>" : "") +
       (visibleColumns.endDate ? "<th>終了</th>" : "") +
-      (visibleColumns.status ? "<th>状態</th>" : "");
+      (visibleColumns.status ? "<th>状態</th>" : "") +
+      "<th>操作</th>";
+
+    const statusOptionsHtml = (item) =>
+      STATUS_OPTIONS
+        .map((value) => {
+          const selected = value === item.status ? " selected" : "";
+          return "<option value=\"" + escapeHtml(value) + "\"" + selected + ">" + escapeHtml(value) + "</option>";
+        })
+        .join("");
 
     const rows = visibleList
       .map((entry) => {
         const item = entry.item;
+        const siblings = items.filter((i) => (i.parentId || null) === (item.parentId || null));
+        const siblingIndex = siblings.findIndex((i) => i.id === item.id);
+        const isFirst = siblingIndex === 0;
+        const isLast = siblingIndex === siblings.length - 1;
+        const disabledAttr = currentProjectLocked ? " disabled" : "";
+
         const toggle = entry.hasChildren
           ? "<span class=\"toggle-arrow\" data-toggle-id=\"" + item.id + "\">" +
             (item.collapsed ? "▶" : "▼") +
@@ -934,11 +1085,19 @@ button:disabled {
         const indentPx = entry.depth * 16 + 4;
         const startCell = visibleColumns.startDate ? "<td>" + escapeHtml(item.startDate) + "</td>" : "";
         const endCell = visibleColumns.endDate ? "<td>" + escapeHtml(item.endDate) + "</td>" : "";
-        const statusCell = visibleColumns.status ? "<td>" + escapeHtml(item.status) + "</td>" : "";
+        const statusCell = visibleColumns.status
+          ? "<td><select class=\"status-select\" data-item-id=\"" + item.id + "\"" + disabledAttr + ">" + statusOptionsHtml(item) + "</select></td>"
+          : "";
         return (
-          "<tr>" +
+          "<tr class=\"schedule-row\" data-item-id=\"" + item.id + "\">" +
           "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
           startCell + endCell + statusCell +
+          "<td class=\"row-actions\">" +
+          "<button class=\"btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\"" + disabledAttr + ">編集</button>" +
+          "<button class=\"btn-row-delete\" data-item-id=\"" + item.id + "\" title=\"削除\"" + disabledAttr + ">削除</button>" +
+          "<button class=\"btn-row-move-up\" data-item-id=\"" + item.id + "\" title=\"上へ\"" + (isFirst || currentProjectLocked ? " disabled" : "") + ">▲</button>" +
+          "<button class=\"btn-row-move-down\" data-item-id=\"" + item.id + "\" title=\"下へ\"" + (isLast || currentProjectLocked ? " disabled" : "") + ">▼</button>" +
+          "</td>" +
           "</tr>"
         );
       })
@@ -1247,6 +1406,73 @@ button:disabled {
       const items = await getScheduleItemsByProject(currentProjectId);
       const item = items.find((i) => i.id === id);
       await setScheduleItemCollapsed(id, !item.collapsed);
+      await renderMainArea();
+    });
+
+    document.getElementById("schedule-table-container").addEventListener("change", async (event) => {
+      if (!event.target.classList.contains("status-select")) return;
+      if (currentProjectLocked) return;
+      const itemId = Number(event.target.dataset.itemId);
+      await updateScheduleItem(itemId, { status: event.target.value });
+    });
+
+    document.getElementById("schedule-table-container").addEventListener("click", async (event) => {
+      const button = event.target.closest("button");
+      if (!button || !button.dataset.itemId) return;
+      if (currentProjectLocked) return;
+      const itemId = Number(button.dataset.itemId);
+
+      if (button.classList.contains("btn-row-edit")) {
+        const item = await getScheduleItemById(itemId);
+        openScheduleEditModal(item);
+        return;
+      }
+
+      if (button.classList.contains("btn-row-delete")) {
+        const ok = window.confirm("このスケジュール項目を削除しますか？");
+        if (!ok) return;
+        await deleteScheduleItem(itemId);
+        await renderMainArea();
+        return;
+      }
+
+      if (button.classList.contains("btn-row-move-up") || button.classList.contains("btn-row-move-down")) {
+        const items = await getScheduleItemsByProject(currentProjectId);
+        const item = items.find((i) => i.id === itemId);
+        const siblings = items.filter((i) => (i.parentId || null) === (item.parentId || null));
+        const index = siblings.findIndex((i) => i.id === itemId);
+        const targetIndex = button.classList.contains("btn-row-move-up") ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= siblings.length) return;
+        await swapScheduleItemOrder(siblings[index], siblings[targetIndex]);
+        await renderMainArea();
+        return;
+      }
+    });
+
+    document.getElementById("btn-cancel-edit-schedule").addEventListener("click", () => {
+      closeScheduleEditModal();
+    });
+
+    document.getElementById("btn-save-edit-schedule").addEventListener("click", async () => {
+      const title = document.getElementById("schedule-edit-title").value.trim();
+      const startDate = document.getElementById("schedule-edit-start-date").value;
+      const endDate = document.getElementById("schedule-edit-end-date").value;
+
+      if (!title) {
+        window.alert("作業内容を入力してください");
+        return;
+      }
+      if (!isValidDateStr(startDate)) {
+        window.alert("開始日を選択してください");
+        return;
+      }
+      if (!isValidDateStr(endDate)) {
+        window.alert("終了日を選択してください");
+        return;
+      }
+
+      await updateScheduleItem(editingScheduleItemId, { title: title, startDate: startDate, endDate: endDate });
+      closeScheduleEditModal();
       await renderMainArea();
     });
 
