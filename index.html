@@ -812,6 +812,47 @@ button:disabled {
 .mindmap-color-swatch.is-current {
   border-color: #1f2937;
 }
+
+/* ==== Section: Print (PDF出力) ==== */
+@media print {
+  .app-header,
+  .toolbar,
+  .side-panel,
+  .modal-overlay,
+  .mindmap-context-menu {
+    display: none !important;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  .main-area {
+    display: block;
+  }
+
+  .schedule-table,
+  .gantt-chart {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .schedule-table table {
+    page-break-inside: auto;
+  }
+
+  .schedule-table tr {
+    page-break-inside: avoid;
+  }
+
+  .gantt-scroll {
+    overflow: visible;
+  }
+
+  .row-actions button {
+    display: none;
+  }
+}
 </style>
 </head>
 <body>
@@ -824,6 +865,7 @@ button:disabled {
   <button id="btn-import-json">データ取込</button>
   <input id="import-json-file-input" type="file" accept="application/json" hidden>
   <button id="btn-export-excel">Excel出力</button>
+  <button id="btn-print-pdf">PDF出力</button>
 </header>
 
 <div class="toolbar">
@@ -4313,6 +4355,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
       await exportProjectAsExcel(currentProjectId);
+    });
+
+    document.getElementById("btn-print-pdf").addEventListener("click", () => {
+      window.print();
     });
 
     document.getElementById("btn-add-schedule").addEventListener("click", async () => {
