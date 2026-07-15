@@ -290,12 +290,10 @@ button:disabled {
   <select id="project-select"></select>
   <button id="btn-new-project">新規プロジェクト作成</button>
   <button id="btn-delete-project">プロジェクト削除</button>
-  <button id="btn-edit-project">編集</button>
-  <button id="btn-milestones">マイルストーン</button>
-  <button id="btn-toggle-lock">ロック</button>
 </header>
 
 <div class="toolbar">
+  <button id="btn-toggle-lock">ロック</button>
   <button id="btn-add-schedule">スケジュール追加</button>
   <label for="period-select">表示単位:</label>
   <select id="period-select">
@@ -310,6 +308,8 @@ button:disabled {
   <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
   <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
   <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
+  <button id="btn-milestones">マイルストーン</button>
+  <button id="btn-edit-project">編集</button>
 </div>
 
 <main class="main-area">
@@ -409,6 +409,7 @@ button:disabled {
   let currentProjectId = null;
   let currentPeriod = "day";
   let currentProjectLocked = false;
+  let isExpandAllToggled = false;
   let visibleColumns = { startDate: true, endDate: true, status: true };
   let editingScheduleItemId = null;
 
@@ -418,6 +419,7 @@ button:disabled {
     db = await openDatabase();
     await refreshProjectSelect();
     await renderMainArea();
+    renderExpandAllButton();
     bindEvents();
   }
 
@@ -743,17 +745,18 @@ button:disabled {
   }
 
   /**
-   * 指定プロジェクトの全スケジュール項目を展開状態(collapsed=false)にする
+   * 指定プロジェクトの全スケジュール項目の折りたたみ状態を一括変更する
    * @param {number} projectId
+   * @param {boolean} collapsed
    * @returns {Promise<void>}
    */
-  async function expandAllScheduleItems(projectId) {
+  async function setAllScheduleItemsCollapsed(projectId, collapsed) {
     const items = await getScheduleItemsByProject(projectId);
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_SCHEDULE_ITEMS, "readwrite");
       const store = tx.objectStore(STORE_SCHEDULE_ITEMS);
       items.forEach((item) => {
-        item.collapsed = false;
+        item.collapsed = collapsed;
         store.put(item);
       });
       tx.oncomplete = () => resolve();
@@ -899,6 +902,13 @@ button:disabled {
    */
   function closeProjectEditModal() {
     document.getElementById("project-edit-modal").hidden = true;
+  }
+
+  /**
+   * isExpandAllToggledに応じて「全て開く」ボタンの表示ラベルを更新する
+   */
+  function renderExpandAllButton() {
+    document.getElementById("btn-expand-all").textContent = isExpandAllToggled ? "すべて閉じる" : "全て開く";
   }
 
   /* ---- Sub-section: Schedule Hierarchy ---- */
@@ -1489,6 +1499,8 @@ button:disabled {
       const project = currentProjectId === null ? null : await getProjectById(currentProjectId);
       currentProjectLocked = Boolean(project && project.locked);
       renderLockUI();
+      isExpandAllToggled = false;
+      renderExpandAllButton();
       await renderMainArea();
     });
 
@@ -1506,6 +1518,8 @@ button:disabled {
       const newId = await addProject(name);
       currentProjectId = newId;
       await refreshProjectSelect();
+      isExpandAllToggled = false;
+      renderExpandAllButton();
       await renderMainArea();
     });
 
@@ -1537,6 +1551,8 @@ button:disabled {
       await deleteProject(currentProjectId);
       currentProjectId = null;
       await refreshProjectSelect();
+      isExpandAllToggled = false;
+      renderExpandAllButton();
       await renderMainArea();
     });
 
@@ -1659,7 +1675,9 @@ button:disabled {
 
     document.getElementById("btn-expand-all").addEventListener("click", async () => {
       if (currentProjectId === null) return;
-      await expandAllScheduleItems(currentProjectId);
+      isExpandAllToggled = !isExpandAllToggled;
+      await setAllScheduleItemsCollapsed(currentProjectId, !isExpandAllToggled);
+      renderExpandAllButton();
       await renderMainArea();
     });
 
