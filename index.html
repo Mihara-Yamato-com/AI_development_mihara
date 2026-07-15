@@ -661,7 +661,7 @@ button:disabled {
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 5;
+  const DB_VERSION = 7;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
@@ -700,7 +700,16 @@ button:disabled {
   document.addEventListener("DOMContentLoaded", init);
 
   async function init() {
-    db = await openDatabase();
+    try {
+      db = await openDatabase();
+    } catch (error) {
+      window.alert(
+        "IndexedDBを開けませんでした（" + error.name + ": " + error.message + "）。\n" +
+        "他のバージョンのGantForgeを試したブラウザだと、DBのバージョンが噛み合わなくなることがあります。\n" +
+        "DevTools > Application > IndexedDB で GantForgeDB を削除してから、このタブだけ開き直してください。"
+      );
+      return;
+    }
     await refreshProjectSelect();
     await renderMainArea();
     renderExpandAllButton();
