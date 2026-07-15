@@ -677,6 +677,141 @@ button:disabled {
   padding-top: 6px;
   text-align: right;
 }
+
+/* ==== Section: Mind Map Panel ==== */
+.mindmap-panel {
+  width: 800px;
+}
+
+.mindmap-canvas-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.mindmap-canvas-wrapper:focus {
+  outline: 2px solid #93c5fd;
+}
+
+.mindmap-canvas {
+  position: relative;
+  transform-origin: 0 0;
+}
+
+.mindmap-connector {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.mindmap-connector line {
+  stroke: #9ca3af;
+  stroke-width: 2;
+}
+
+.mindmap-node {
+  position: absolute;
+  padding: 8px 20px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.mindmap-node.is-selected {
+  outline: 3px solid #1f2937;
+  outline-offset: 2px;
+}
+
+.mindmap-node.is-editing {
+  padding: 4px 10px;
+}
+
+.mindmap-node .mindmap-node-input {
+  font-size: 13px;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1f2937;
+  border-radius: 999px;
+  padding: 4px 10px;
+  width: 140px;
+  box-sizing: border-box;
+}
+
+.mindmap-node.color-blue { background: #3b82f6; }
+.mindmap-node.color-purple { background: #8b5cf6; }
+.mindmap-node.color-lightblue { background: #38bdf8; }
+.mindmap-node.color-green { background: #22c55e; }
+.mindmap-node.color-brown { background: #92400e; }
+.mindmap-node.color-red { background: #ef4444; }
+.mindmap-node.color-pink { background: #ec4899; }
+.mindmap-node.color-orange { background: #f97316; }
+.mindmap-node.color-gray { background: #6b7280; }
+
+.mindmap-footer {
+  font-size: 11px;
+  color: #6b7280;
+  padding-top: 6px;
+}
+
+.mindmap-context-menu {
+  position: fixed;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+}
+
+.mindmap-context-menu button {
+  text-align: left;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.mindmap-context-menu button:hover {
+  background: #f3f4f6;
+}
+
+.mindmap-menu-colors {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.mindmap-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.mindmap-color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mindmap-color-swatch.is-current {
+  border-color: #1f2937;
+}
 </style>
 </head>
 <body>
@@ -711,6 +846,7 @@ button:disabled {
   <button id="btn-quick-memos">即時メモ</button>
   <button id="btn-tasks">タスク管理</button>
   <button id="btn-snapshots">スナップショット</button>
+  <button id="btn-mindmap">マインドマップ</button>
 </div>
 
 <main class="main-area">
@@ -884,13 +1020,38 @@ button:disabled {
   <div id="snapshot-count-footer" class="snapshot-footer">0件のスナップショット</div>
 </aside>
 
+<aside id="mindmap-panel" class="side-panel mindmap-panel" hidden>
+  <div class="side-panel-header">
+    <h2>マインドマップ</h2>
+    <div class="side-panel-header-right">
+      <button id="btn-mindmap-fit">全体表示</button>
+      <button id="btn-close-mindmap-panel" class="btn-close-x">×</button>
+    </div>
+  </div>
+  <div id="mindmap-canvas-wrapper" class="mindmap-canvas-wrapper" tabindex="0">
+    <div id="mindmap-canvas" class="mindmap-canvas"></div>
+  </div>
+  <div class="mindmap-footer">
+    Tab: 子ノード追加 / Enter: 兄弟ノード追加 / Del: 削除 / F2: 編集 / ダブルクリック: 子ノード追加 / 右クリック: メニュー
+  </div>
+</aside>
+
+<div id="mindmap-context-menu" class="mindmap-context-menu" hidden>
+  <button id="mindmap-menu-rename">名前の変更</button>
+  <button id="mindmap-menu-add-child">子ノードの追加</button>
+  <div class="mindmap-menu-colors">
+    <span>色:</span>
+    <div id="mindmap-menu-color-swatches" class="mindmap-color-swatches"></div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 10;
+  const DB_VERSION = 11;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
@@ -908,6 +1069,32 @@ button:disabled {
   const INDEX_COMMENTS_BY_SCHEDULE_ITEM = "by_scheduleItemId";
   const STORE_SNAPSHOTS = "snapshots";
   const INDEX_SNAPSHOTS_BY_PROJECT = "by_projectId";
+  const STORE_MINDMAP_NODES = "mindMapNodes";
+  const INDEX_MINDMAP_NODES_BY_PROJECT = "by_projectId";
+
+  const MINDMAP_COLORS = ["blue", "purple", "lightblue", "green", "brown", "red", "pink", "orange", "gray"];
+  const MINDMAP_COLOR_LABELS = {
+    blue: "青",
+    purple: "紫",
+    lightblue: "水色",
+    green: "緑",
+    brown: "茶色",
+    red: "赤",
+    pink: "ピンク",
+    orange: "オレンジ",
+    gray: "グレー",
+  };
+  const MINDMAP_COLOR_HEX = {
+    blue: "#3b82f6",
+    purple: "#8b5cf6",
+    lightblue: "#38bdf8",
+    green: "#22c55e",
+    brown: "#92400e",
+    red: "#ef4444",
+    pink: "#ec4899",
+    orange: "#f97316",
+    gray: "#6b7280",
+  };
 
   const STATUS_NOT_STARTED = "未着手";
   const STATUS_IN_PROGRESS = "進行中";
@@ -932,6 +1119,11 @@ button:disabled {
   let memoViewMode = "edit";
   let memoSaveTimer = null;
   let editingTaskId = null;
+  let mindMapNodesCache = [];
+  let selectedMindMapNodeId = null;
+  let mindMapContextMenuNodeId = null;
+  let mindMapEditingNodeId = null;
+  let mindMapDragState = null;
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -1057,6 +1249,16 @@ button:disabled {
             autoIncrement: true,
           });
           snapshotStore.createIndex(INDEX_SNAPSHOTS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_MINDMAP_NODES)) {
+          const mindMapStore = database.createObjectStore(STORE_MINDMAP_NODES, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          mindMapStore.createIndex(INDEX_MINDMAP_NODES_BY_PROJECT, "projectId", {
             unique: false,
           });
         }
@@ -1890,6 +2092,7 @@ button:disabled {
     const tasks = await getTasksByProject(projectId);
     const memos = await getMemosByProject(projectId);
     const quickMemos = await getQuickMemosByProject(projectId);
+    const mindMapNodes = await getMindMapNodesByProject(projectId);
     const commentsByItem = await Promise.all(scheduleItems.map((item) => getCommentsByScheduleItem(item.id)));
 
     const data = {
@@ -1900,6 +2103,7 @@ button:disabled {
       comments: commentsByItem.flat(),
       memos: memos,
       quickMemos: quickMemos,
+      mindMapNodes: mindMapNodes,
     };
 
     return new Promise((resolve, reject) => {
@@ -1980,12 +2184,13 @@ button:disabled {
     await deleteAllByProjectId(STORE_TASKS, INDEX_TASKS_BY_PROJECT, projectId);
     await deleteAllByProjectId(STORE_MEMOS, INDEX_MEMOS_BY_PROJECT, projectId);
     await deleteAllByProjectId(STORE_QUICK_MEMOS, INDEX_QUICK_MEMOS_BY_PROJECT, projectId);
+    await deleteAllByProjectId(STORE_MINDMAP_NODES, INDEX_MINDMAP_NODES_BY_PROJECT, projectId);
   }
 
   /**
    * 指定スナップショットの内容で、選択中プロジェクトの状態を丸ごと置き換える。
    * 現在のプロジェクトに紐づく全データを削除してから、スナップショットの内容を再投入する。
-   * scheduleItemsは親子関係(parentId)、commentsはscheduleItemIdを
+   * scheduleItems/mindMapNodesは親子関係(parentId)、commentsはscheduleItemIdを
    * 新しいidに付け替えてから復元する。
    * @param {number} snapshotId
    * @returns {Promise<void>}
@@ -2033,6 +2238,111 @@ button:disabled {
     for (const quickMemo of data.quickMemos) {
       await insertRawRecord(STORE_QUICK_MEMOS, Object.assign({}, quickMemo, { projectId: projectId }));
     }
+
+    const mindMapIdMap = {};
+    for (const node of data.mindMapNodes || []) {
+      const newId = await insertRawRecord(STORE_MINDMAP_NODES, Object.assign({}, node, { projectId: projectId }));
+      mindMapIdMap[node.id] = newId;
+    }
+    for (const node of data.mindMapNodes || []) {
+      if (node.parentId) {
+        await updateMindMapNode(mindMapIdMap[node.id], { parentId: mindMapIdMap[node.parentId] || null });
+      }
+    }
+  }
+
+  /* ---- Sub-section: Mind Map ---- */
+
+  /**
+   * マインドマップノードを1件追加する
+   * @param {Object} node
+   * @param {number} node.projectId
+   * @param {number|null} node.parentId
+   * @param {string} node.text
+   * @param {string} node.color
+   * @param {number} node.x
+   * @param {number} node.y
+   * @returns {Promise<number>} 追加されたノードのid
+   */
+  function addMindMapNode(node) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MINDMAP_NODES, "readwrite");
+      const store = tx.objectStore(STORE_MINDMAP_NODES);
+      const request = store.add({
+        projectId: node.projectId,
+        parentId: node.parentId,
+        text: node.text,
+        color: node.color,
+        x: node.x,
+        y: node.y,
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトのマインドマップノードを全件取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getMindMapNodesByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MINDMAP_NODES, "readonly");
+      const store = tx.objectStore(STORE_MINDMAP_NODES);
+      const index = store.index(INDEX_MINDMAP_NODES_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * マインドマップノードの内容を更新する
+   * @param {number} id
+   * @param {Object} changes - text/color/x/yのうち更新したい項目
+   * @returns {Promise<void>}
+   */
+  function updateMindMapNode(id, changes) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MINDMAP_NODES, "readwrite");
+      const store = tx.objectStore(STORE_MINDMAP_NODES);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const node = getRequest.result;
+        Object.assign(node, changes);
+        const putRequest = store.put(node);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * マインドマップノードを、子孫ノードも含めて再帰的に削除する
+   * mindMapNodesCache(現在開いているマインドマップの全ノード)を使って対象を割り出す
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteMindMapNodeCascade(id) {
+    const idsToDelete = [];
+    const collect = (targetId) => {
+      idsToDelete.push(targetId);
+      mindMapNodesCache
+        .filter((n) => n.parentId === targetId)
+        .forEach((child) => collect(child.id));
+    };
+    collect(id);
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MINDMAP_NODES, "readwrite");
+      const store = tx.objectStore(STORE_MINDMAP_NODES);
+      idsToDelete.forEach((deleteId) => store.delete(deleteId));
+      tx.oncomplete = () => resolve();
+      tx.onerror = (event) => reject(event.target.error);
+    });
   }
 
   /* ==== Section: UI描画 ==== */
@@ -2685,6 +2995,394 @@ button:disabled {
     await deleteSnapshot(snapshotId);
     await renderSnapshotList();
     await addChangeLog(currentProjectId, "スナップショットを削除しました");
+  }
+
+  /* ---- Sub-section: Mind Map Panel ---- */
+
+  /**
+   * マインドマップパネルを、選択中プロジェクトのマインドマップを表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openMindMapPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    await ensureMindMapRoot();
+    await loadMindMapNodes();
+    selectedMindMapNodeId = null;
+    mindMapEditingNodeId = null;
+    renderMindMap();
+    document.getElementById("mindmap-panel").hidden = false;
+    document.getElementById("mindmap-canvas-wrapper").focus();
+  }
+
+  /**
+   * マインドマップパネルを閉じる
+   */
+  function closeMindMapPanel() {
+    document.getElementById("mindmap-panel").hidden = true;
+    closeMindMapContextMenu();
+  }
+
+  /**
+   * 選択中プロジェクトにルートノードが無ければ、プロジェクト名で1件作成する
+   * @returns {Promise<void>}
+   */
+  async function ensureMindMapRoot() {
+    const nodes = await getMindMapNodesByProject(currentProjectId);
+    if (nodes.some((n) => n.parentId === null)) return;
+    const project = await getProjectById(currentProjectId);
+    await addMindMapNode({ projectId: currentProjectId, parentId: null, text: project.name, color: "blue", x: 300, y: 200 });
+  }
+
+  /**
+   * mindMapNodesCacheを選択中プロジェクトの最新内容で更新する
+   * @returns {Promise<void>}
+   */
+  async function loadMindMapNodes() {
+    mindMapNodesCache = await getMindMapNodesByProject(currentProjectId);
+  }
+
+  /**
+   * マインドマップ全体(ノード+接続線)を再描画する
+   */
+  function renderMindMap() {
+    const canvas = document.getElementById("mindmap-canvas");
+    canvas.innerHTML = mindMapNodesCache
+      .map((node) => {
+        const isSelected = node.id === selectedMindMapNodeId;
+        const isEditing = node.id === mindMapEditingNodeId;
+        const classes = "mindmap-node color-" + node.color + (isSelected ? " is-selected" : "") + (isEditing ? " is-editing" : "");
+        const inner = isEditing
+          ? "<input class=\"mindmap-node-input\" value=\"" + escapeHtml(node.text) + "\">"
+          : escapeHtml(node.text);
+        return (
+          "<div class=\"" + classes + "\" data-node-id=\"" + node.id + "\" style=\"left:" + node.x + "px; top:" + node.y + "px;\">" +
+          inner +
+          "</div>"
+        );
+      })
+      .join("");
+
+    drawMindMapConnectors();
+
+    if (mindMapEditingNodeId !== null) {
+      const input = canvas.querySelector(".mindmap-node-input");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  }
+
+  /**
+   * ノード間の接続線をSVGで描画する。ドラッグ中の一時的な位置更新時にも呼び出す
+   */
+  function drawMindMapConnectors() {
+    const canvas = document.getElementById("mindmap-canvas");
+    let svg = canvas.querySelector(".mindmap-connector");
+    if (!svg) {
+      svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "mindmap-connector");
+      canvas.insertBefore(svg, canvas.firstChild);
+    }
+    svg.innerHTML = "";
+
+    const rectById = {};
+    canvas.querySelectorAll(".mindmap-node").forEach((el) => {
+      rectById[Number(el.dataset.nodeId)] = {
+        cx: el.offsetLeft + el.offsetWidth / 2,
+        cy: el.offsetTop + el.offsetHeight / 2,
+      };
+      svg.setAttribute("width", canvas.scrollWidth);
+      svg.setAttribute("height", canvas.scrollHeight);
+    });
+
+    mindMapNodesCache.forEach((node) => {
+      if (node.parentId === null) return;
+      const parentRect = rectById[node.parentId];
+      const childRect = rectById[node.id];
+      if (!parentRect || !childRect) return;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", parentRect.cx);
+      line.setAttribute("y1", parentRect.cy);
+      line.setAttribute("x2", childRect.cx);
+      line.setAttribute("y2", childRect.cy);
+      svg.appendChild(line);
+    });
+  }
+
+  /**
+   * ノードを選択状態にする(再描画はせず、選択枠の付け替えのみ行う)
+   * @param {number} nodeId
+   */
+  function selectMindMapNode(nodeId) {
+    selectedMindMapNodeId = nodeId;
+    document.querySelectorAll(".mindmap-node").forEach((el) => {
+      el.classList.toggle("is-selected", Number(el.dataset.nodeId) === nodeId);
+    });
+  }
+
+  /**
+   * 対象ノードの子ノードを追加し、追加直後にリネーム編集状態にする
+   * @param {number} parentId
+   * @returns {Promise<void>}
+   */
+  async function addMindMapChildNode(parentId) {
+    const parent = mindMapNodesCache.find((n) => n.id === parentId);
+    if (!parent) return;
+    const existingChildren = mindMapNodesCache.filter((n) => n.parentId === parentId);
+    const newId = await addMindMapNode({
+      projectId: currentProjectId,
+      parentId: parentId,
+      text: "新しいノード",
+      color: "blue",
+      x: parent.x + 200,
+      y: parent.y + existingChildren.length * 60,
+    });
+    await loadMindMapNodes();
+    selectMindMapNode(newId);
+    startMindMapNodeRename(newId);
+    await addChangeLog(currentProjectId, "マインドマップにノードを追加しました");
+  }
+
+  /**
+   * 対象ノードの兄弟ノード(同じ親を持つノード)を追加し、追加直後にリネーム編集状態にする
+   * @param {number} nodeId
+   * @returns {Promise<void>}
+   */
+  async function addMindMapSiblingNode(nodeId) {
+    const node = mindMapNodesCache.find((n) => n.id === nodeId);
+    if (!node || node.parentId === null) return;
+    const newId = await addMindMapNode({
+      projectId: currentProjectId,
+      parentId: node.parentId,
+      text: "新しいノード",
+      color: "blue",
+      x: node.x,
+      y: node.y + 60,
+    });
+    await loadMindMapNodes();
+    selectMindMapNode(newId);
+    startMindMapNodeRename(newId);
+    await addChangeLog(currentProjectId, "マインドマップにノードを追加しました");
+  }
+
+  /**
+   * ノードを確認の上、子孫ノードごと削除する(ルートノードは削除不可)
+   * @param {number} nodeId
+   * @returns {Promise<void>}
+   */
+  async function deleteMindMapNodeWithConfirm(nodeId) {
+    const node = mindMapNodesCache.find((n) => n.id === nodeId);
+    if (!node) return;
+    if (node.parentId === null) {
+      window.alert("ルートノードは削除できません");
+      return;
+    }
+    const ok = window.confirm("このノードを削除しますか？（子ノードも全て削除されます）");
+    if (!ok) return;
+    await deleteMindMapNodeCascade(nodeId);
+    selectedMindMapNodeId = null;
+    await loadMindMapNodes();
+    renderMindMap();
+    await addChangeLog(currentProjectId, "マインドマップのノード「" + node.text + "」を削除しました");
+  }
+
+  /**
+   * ノードをインライン編集(リネーム)状態にする
+   * @param {number} nodeId
+   */
+  function startMindMapNodeRename(nodeId) {
+    if (currentProjectLocked) return;
+    mindMapEditingNodeId = nodeId;
+    renderMindMap();
+  }
+
+  /**
+   * ノードのインライン編集を終了する
+   * @param {number} nodeId
+   * @param {string|null} newText - commitがtrueのとき使用する新しい文言
+   * @param {boolean} commit - trueなら保存、falseなら破棄
+   * @returns {Promise<void>}
+   */
+  async function finishMindMapNodeRename(nodeId, newText, commit) {
+    if (mindMapEditingNodeId !== nodeId) return;
+    mindMapEditingNodeId = null;
+    if (commit) {
+      const trimmed = (newText || "").trim();
+      const node = mindMapNodesCache.find((n) => n.id === nodeId);
+      if (trimmed && node && trimmed !== node.text) {
+        await updateMindMapNode(nodeId, { text: trimmed });
+        await addChangeLog(currentProjectId, "マインドマップのノード名を「" + trimmed + "」に変更しました");
+      }
+    }
+    await loadMindMapNodes();
+    renderMindMap();
+  }
+
+  /**
+   * ノードの右クリックメニューを開く
+   * @param {number} nodeId
+   * @param {number} clientX
+   * @param {number} clientY
+   */
+  function openMindMapContextMenu(nodeId, clientX, clientY) {
+    mindMapContextMenuNodeId = nodeId;
+    selectMindMapNode(nodeId);
+    const node = mindMapNodesCache.find((n) => n.id === nodeId);
+    const menu = document.getElementById("mindmap-context-menu");
+    menu.style.left = clientX + "px";
+    menu.style.top = clientY + "px";
+    menu.hidden = false;
+
+    document.getElementById("mindmap-menu-color-swatches").innerHTML = MINDMAP_COLORS
+      .map((color) => {
+        const isCurrent = node && node.color === color ? " is-current" : "";
+        return (
+          "<button class=\"mindmap-color-swatch" + isCurrent + "\" data-color=\"" + color + "\" title=\"" + MINDMAP_COLOR_LABELS[color] + "\" style=\"background:" + MINDMAP_COLOR_HEX[color] + "\"></button>"
+        );
+      })
+      .join("");
+  }
+
+  /**
+   * ノードの右クリックメニューを閉じる
+   */
+  function closeMindMapContextMenu() {
+    mindMapContextMenuNodeId = null;
+    document.getElementById("mindmap-context-menu").hidden = true;
+  }
+
+  /**
+   * マインドマップ全体がパネル内に収まるよう、拡大・縮小と表示位置を調整する
+   */
+  function fitMindMapToView() {
+    const wrapper = document.getElementById("mindmap-canvas-wrapper");
+    const canvas = document.getElementById("mindmap-canvas");
+    const nodeEls = canvas.querySelectorAll(".mindmap-node");
+    if (nodeEls.length === 0) return;
+
+    canvas.style.transform = "scale(1)";
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    nodeEls.forEach((el) => {
+      minX = Math.min(minX, el.offsetLeft);
+      minY = Math.min(minY, el.offsetTop);
+      maxX = Math.max(maxX, el.offsetLeft + el.offsetWidth);
+      maxY = Math.max(maxY, el.offsetTop + el.offsetHeight);
+    });
+
+    const contentWidth = maxX - minX + 40;
+    const contentHeight = maxY - minY + 40;
+    const scale = Math.min(wrapper.clientWidth / contentWidth, wrapper.clientHeight / contentHeight, 2);
+
+    canvas.style.transform = "scale(" + scale + ")";
+    wrapper.scrollLeft = minX * scale - 20;
+    wrapper.scrollTop = minY * scale - 20;
+  }
+
+  /**
+   * マインドマップのキーボードショートカット(Tab/Enter/Del/F2)、
+   * および編集中インプットのEnter確定・Escapeキャンセルを処理する
+   * @param {KeyboardEvent} event
+   * @returns {Promise<void>}
+   */
+  async function handleMindMapKeydown(event) {
+    if (event.target.classList.contains("mindmap-node-input")) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        await finishMindMapNodeRename(mindMapEditingNodeId, event.target.value, true);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        await finishMindMapNodeRename(mindMapEditingNodeId, null, false);
+      }
+      return;
+    }
+
+    if (selectedMindMapNodeId === null || currentProjectLocked) return;
+
+    if (event.key === "Tab") {
+      event.preventDefault();
+      await addMindMapChildNode(selectedMindMapNodeId);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      await addMindMapSiblingNode(selectedMindMapNodeId);
+    } else if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      await deleteMindMapNodeWithConfirm(selectedMindMapNodeId);
+    } else if (event.key === "F2") {
+      event.preventDefault();
+      startMindMapNodeRename(selectedMindMapNodeId);
+    }
+  }
+
+  /**
+   * ノードのドラッグ移動を開始する
+   * @param {PointerEvent} event
+   * @param {number} nodeId
+   */
+  function startMindMapNodeDrag(event, nodeId) {
+    if (event.target.closest(".mindmap-node-input")) return;
+    if (event.button !== 0) return;
+    const node = mindMapNodesCache.find((n) => n.id === nodeId);
+    if (!node) return;
+    selectMindMapNode(nodeId);
+    if (currentProjectLocked) return;
+
+    mindMapDragState = {
+      nodeId: nodeId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: node.x,
+      startY: node.y,
+      moved: false,
+    };
+    window.addEventListener("pointermove", onMindMapPointerMove);
+    window.addEventListener("pointerup", onMindMapPointerUp);
+  }
+
+  /**
+   * ノードドラッグ中のpointermoveハンドラ。位置を直接更新し接続線を引き直す
+   * @param {PointerEvent} event
+   */
+  function onMindMapPointerMove(event) {
+    if (!mindMapDragState) return;
+    const dx = event.clientX - mindMapDragState.startClientX;
+    const dy = event.clientY - mindMapDragState.startClientY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      mindMapDragState.moved = true;
+    }
+    const newX = mindMapDragState.startX + dx;
+    const newY = mindMapDragState.startY + dy;
+    const el = document.querySelector(".mindmap-node[data-node-id=\"" + mindMapDragState.nodeId + "\"]");
+    if (el) {
+      el.style.left = newX + "px";
+      el.style.top = newY + "px";
+    }
+    drawMindMapConnectors();
+  }
+
+  /**
+   * ノードドラッグ終了時のpointerupハンドラ。動いていれば新しい位置をIndexedDBへ保存する
+   * @param {PointerEvent} event
+   * @returns {Promise<void>}
+   */
+  async function onMindMapPointerUp(event) {
+    window.removeEventListener("pointermove", onMindMapPointerMove);
+    window.removeEventListener("pointerup", onMindMapPointerUp);
+    if (!mindMapDragState) return;
+    const { nodeId, moved, startX, startY } = mindMapDragState;
+    if (moved) {
+      const dx = event.clientX - mindMapDragState.startClientX;
+      const dy = event.clientY - mindMapDragState.startClientY;
+      await updateMindMapNode(nodeId, { x: startX + dx, y: startY + dy });
+      await loadMindMapNodes();
+    }
+    mindMapDragState = null;
   }
 
   /* ---- Sub-section: Schedule Edit Modal ---- */
@@ -3696,6 +4394,79 @@ button:disabled {
       if (event.target.closest(".btn-snapshot-delete")) {
         await deleteSnapshotWithConfirm(snapshotId);
         return;
+      }
+    });
+
+    document.getElementById("btn-mindmap").addEventListener("click", async () => {
+      await openMindMapPanel();
+    });
+
+    document.getElementById("btn-close-mindmap-panel").addEventListener("click", () => {
+      closeMindMapPanel();
+    });
+
+    document.getElementById("btn-mindmap-fit").addEventListener("click", () => {
+      fitMindMapToView();
+    });
+
+    document.getElementById("mindmap-canvas-wrapper").addEventListener("pointerdown", (event) => {
+      const nodeEl = event.target.closest(".mindmap-node");
+      if (!nodeEl) return;
+      startMindMapNodeDrag(event, Number(nodeEl.dataset.nodeId));
+    });
+
+    document.getElementById("mindmap-canvas-wrapper").addEventListener("dblclick", async (event) => {
+      if (currentProjectLocked) return;
+      const nodeEl = event.target.closest(".mindmap-node");
+      if (!nodeEl) return;
+      await addMindMapChildNode(Number(nodeEl.dataset.nodeId));
+    });
+
+    document.getElementById("mindmap-canvas-wrapper").addEventListener("contextmenu", (event) => {
+      const nodeEl = event.target.closest(".mindmap-node");
+      if (!nodeEl) return;
+      event.preventDefault();
+      if (currentProjectLocked) return;
+      openMindMapContextMenu(Number(nodeEl.dataset.nodeId), event.clientX, event.clientY);
+    });
+
+    document.getElementById("mindmap-canvas-wrapper").addEventListener("keydown", async (event) => {
+      await handleMindMapKeydown(event);
+    });
+
+    document.getElementById("mindmap-canvas-wrapper").addEventListener("focusout", async (event) => {
+      if (event.target.classList.contains("mindmap-node-input") && mindMapEditingNodeId !== null) {
+        await finishMindMapNodeRename(mindMapEditingNodeId, event.target.value, true);
+      }
+    });
+
+    document.getElementById("mindmap-menu-rename").addEventListener("click", () => {
+      const nodeId = mindMapContextMenuNodeId;
+      closeMindMapContextMenu();
+      startMindMapNodeRename(nodeId);
+    });
+
+    document.getElementById("mindmap-menu-add-child").addEventListener("click", async () => {
+      const nodeId = mindMapContextMenuNodeId;
+      closeMindMapContextMenu();
+      await addMindMapChildNode(nodeId);
+    });
+
+    document.getElementById("mindmap-menu-color-swatches").addEventListener("click", async (event) => {
+      const swatch = event.target.closest(".mindmap-color-swatch");
+      if (!swatch) return;
+      const nodeId = mindMapContextMenuNodeId;
+      const color = swatch.dataset.color;
+      closeMindMapContextMenu();
+      await updateMindMapNode(nodeId, { color: color });
+      await loadMindMapNodes();
+      renderMindMap();
+    });
+
+    document.addEventListener("click", (event) => {
+      const menu = document.getElementById("mindmap-context-menu");
+      if (!menu.hidden && !menu.contains(event.target) && !event.target.closest(".mindmap-node")) {
+        closeMindMapContextMenu();
       }
     });
 
