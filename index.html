@@ -153,13 +153,16 @@ body {
   pointer-events: none;
 }
 
-.milestone-label {
+.milestone-marker {
   position: absolute;
   top: 0;
-  font-size: 10px;
-  color: #a855f7;
-  white-space: nowrap;
-  transform: translateX(2px);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #a855f7;
+  transform: translateX(-6px);
+  cursor: default;
 }
 
 /* ==== Section: Modal ==== */
@@ -1114,7 +1117,7 @@ button:disabled {
         const left = diffInDays(rangeStart, parseDateStr(milestone.date)) * dayWidthPx;
         return (
           "<div class=\"milestone-line\" style=\"left:" + left + "px; height:" + totalHeight + "px\"></div>" +
-          "<div class=\"milestone-label\" style=\"left:" + left + "px\">" + escapeHtml(milestone.label) + "</div>"
+          "<div class=\"milestone-marker\" style=\"left:" + left + "px\" title=\"" + escapeHtml(milestone.label) + "\"></div>"
         );
       })
       .join("");
