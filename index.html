@@ -607,6 +607,76 @@ button:disabled {
   font-size: 11px;
   padding: 1px 4px;
 }
+
+/* ==== Section: Snapshot Panel ==== */
+.btn-close-x {
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 8px;
+}
+
+.snapshot-panel {
+  width: 700px;
+}
+
+.snapshot-item {
+  border-bottom: 1px solid #f3f4f6;
+  padding: 8px 0;
+}
+
+.snapshot-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.snapshot-item-name {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.snapshot-item-meta {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.snapshot-item-actions button {
+  visibility: hidden;
+  font-size: 14px;
+  padding: 2px 8px;
+  margin-left: 2px;
+}
+
+.snapshot-item:hover .snapshot-item-actions button {
+  visibility: visible;
+}
+
+.snapshot-diff {
+  margin-top: 6px;
+  padding: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.snapshot-diff h4 {
+  margin: 4px 0 2px;
+  font-size: 12px;
+}
+
+.snapshot-diff ul {
+  margin: 0 0 4px;
+  padding-left: 18px;
+}
+
+.snapshot-footer {
+  font-size: 12px;
+  color: #6b7280;
+  padding-top: 6px;
+  text-align: right;
+}
 </style>
 </head>
 <body>
@@ -640,6 +710,7 @@ button:disabled {
   <button id="btn-memos">メモ</button>
   <button id="btn-quick-memos">即時メモ</button>
   <button id="btn-tasks">タスク管理</button>
+  <button id="btn-snapshots">スナップショット</button>
 </div>
 
 <main class="main-area">
@@ -800,13 +871,26 @@ button:disabled {
   <div id="comment-panel-list" class="side-panel-body"></div>
 </aside>
 
+<aside id="snapshot-panel" class="side-panel snapshot-panel" hidden>
+  <div class="side-panel-header">
+    <h2>スナップショット</h2>
+    <div class="side-panel-header-right">
+      <span id="snapshot-count-header">0件</span>
+      <button id="btn-save-snapshot">保存</button>
+      <button id="btn-close-snapshot-panel" class="btn-close-x">×</button>
+    </div>
+  </div>
+  <div id="snapshot-list" class="side-panel-body"></div>
+  <div id="snapshot-count-footer" class="snapshot-footer">0件のスナップショット</div>
+</aside>
+
 <script>
 (function () {
   "use strict";
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 8;
+  const DB_VERSION = 9;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
@@ -822,6 +906,8 @@ button:disabled {
   const INDEX_TASKS_BY_PROJECT = "by_projectId";
   const STORE_COMMENTS = "comments";
   const INDEX_COMMENTS_BY_SCHEDULE_ITEM = "by_scheduleItemId";
+  const STORE_SNAPSHOTS = "snapshots";
+  const INDEX_SNAPSHOTS_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
   const STATUS_IN_PROGRESS = "進行中";
@@ -961,6 +1047,16 @@ button:disabled {
             autoIncrement: true,
           });
           commentStore.createIndex(INDEX_COMMENTS_BY_SCHEDULE_ITEM, "scheduleItemId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_SNAPSHOTS)) {
+          const snapshotStore = database.createObjectStore(STORE_SNAPSHOTS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          snapshotStore.createIndex(INDEX_SNAPSHOTS_BY_PROJECT, "projectId", {
             unique: false,
           });
         }
@@ -1740,6 +1836,219 @@ button:disabled {
     });
   }
 
+  /* ---- Sub-section: Snapshots ---- */
+
+  /**
+   * レコードのidを除いた内容を、指定ストアに新規追加する(スナップショット復元用の汎用ヘルパー)
+   * @param {string} storeName
+   * @param {Object} record
+   * @returns {Promise<number>} 追加されたレコードのid
+   */
+  function insertRawRecord(storeName, record) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, "readwrite");
+      const store = tx.objectStore(storeName);
+      const clone = Object.assign({}, record);
+      delete clone.id;
+      const request = store.add(clone);
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定ストアから、projectIdインデックスに一致する全レコードを削除する(スナップショット復元用の汎用ヘルパー)
+   * @param {string} storeName
+   * @param {string} indexName
+   * @param {number} projectId
+   * @returns {Promise<void>}
+   */
+  function deleteAllByProjectId(storeName, indexName, projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, "readwrite");
+      const store = tx.objectStore(storeName);
+      const index = store.index(indexName);
+      const request = index.getAllKeys(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        event.target.result.forEach((key) => store.delete(key));
+      };
+      request.onerror = (event) => reject(event.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 選択中プロジェクトの現在の状態(プロジェクト情報+紐づく全データ)をスナップショットとして保存する
+   * @param {number} projectId
+   * @returns {Promise<number>} 追加されたスナップショットのid
+   */
+  async function createSnapshot(projectId) {
+    const project = await getProjectById(projectId);
+    const scheduleItems = await getScheduleItemsByProject(projectId);
+    const milestones = await getMilestonesByProject(projectId);
+    const tasks = await getTasksByProject(projectId);
+    const memos = await getMemosByProject(projectId);
+    const quickMemos = await getQuickMemosByProject(projectId);
+    const mindMapNodes = await getMindMapNodesByProject(projectId);
+    const commentsByItem = await Promise.all(scheduleItems.map((item) => getCommentsByScheduleItem(item.id)));
+
+    const data = {
+      project: { name: project.name, description: project.description, locked: project.locked },
+      scheduleItems: scheduleItems,
+      milestones: milestones,
+      tasks: tasks,
+      comments: commentsByItem.flat(),
+      memos: memos,
+      quickMemos: quickMemos,
+      mindMapNodes: mindMapNodes,
+    };
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SNAPSHOTS, "readwrite");
+      const store = tx.objectStore(STORE_SNAPSHOTS);
+      const request = store.add({
+        projectId: projectId,
+        createdAt: Date.now(),
+        data: data,
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトのスナップショットを、新しい順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getSnapshotsByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SNAPSHOTS, "readonly");
+      const store = tx.objectStore(STORE_SNAPSHOTS);
+      const index = store.index(INDEX_SNAPSHOTS_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const snapshots = event.target.result;
+        snapshots.sort((a, b) => b.createdAt - a.createdAt);
+        resolve(snapshots);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * idを指定してスナップショットを1件取得する
+   * @param {number} id
+   * @returns {Promise<Object>}
+   */
+  function getSnapshotById(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SNAPSHOTS, "readonly");
+      const store = tx.objectStore(STORE_SNAPSHOTS);
+      const request = store.get(id);
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * スナップショットを削除する
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteSnapshot(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_SNAPSHOTS, "readwrite");
+      const store = tx.objectStore(STORE_SNAPSHOTS);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトに紐づく、スナップショット対象データ(スナップショット自体を除く)を全て削除する
+   * @param {number} projectId
+   * @returns {Promise<void>}
+   */
+  async function clearProjectData(projectId) {
+    const items = await getScheduleItemsByProject(projectId);
+    for (const item of items) {
+      await deleteCommentsByScheduleItem(item.id);
+    }
+    await deleteAllByProjectId(STORE_SCHEDULE_ITEMS, INDEX_SCHEDULE_ITEMS_BY_PROJECT, projectId);
+    await deleteAllByProjectId(STORE_MILESTONES, INDEX_MILESTONES_BY_PROJECT, projectId);
+    await deleteAllByProjectId(STORE_TASKS, INDEX_TASKS_BY_PROJECT, projectId);
+    await deleteAllByProjectId(STORE_MEMOS, INDEX_MEMOS_BY_PROJECT, projectId);
+    await deleteAllByProjectId(STORE_QUICK_MEMOS, INDEX_QUICK_MEMOS_BY_PROJECT, projectId);
+    await deleteAllByProjectId(STORE_MINDMAP_NODES, INDEX_MINDMAP_NODES_BY_PROJECT, projectId);
+  }
+
+  /**
+   * 指定スナップショットの内容で、選択中プロジェクトの状態を丸ごと置き換える。
+   * 現在のプロジェクトに紐づく全データを削除してから、スナップショットの内容を再投入する。
+   * scheduleItems/mindMapNodesは親子関係(parentId)、commentsはscheduleItemIdを
+   * 新しいidに付け替えてから復元する。
+   * @param {number} snapshotId
+   * @returns {Promise<void>}
+   */
+  async function restoreSnapshotById(snapshotId) {
+    const snapshot = await getSnapshotById(snapshotId);
+    if (!snapshot) return;
+    const data = snapshot.data;
+    const projectId = currentProjectId;
+
+    await clearProjectData(projectId);
+    await updateProject(projectId, { name: data.project.name, description: data.project.description });
+    await setProjectLocked(projectId, Boolean(data.project.locked));
+
+    const scheduleIdMap = {};
+    for (const item of data.scheduleItems) {
+      const newId = await insertRawRecord(STORE_SCHEDULE_ITEMS, Object.assign({}, item, { projectId: projectId }));
+      scheduleIdMap[item.id] = newId;
+    }
+    for (const item of data.scheduleItems) {
+      if (item.parentId) {
+        await updateScheduleItem(scheduleIdMap[item.id], { parentId: scheduleIdMap[item.parentId] || null });
+      }
+    }
+
+    for (const milestone of data.milestones) {
+      await insertRawRecord(STORE_MILESTONES, Object.assign({}, milestone, { projectId: projectId }));
+    }
+
+    for (const task of data.tasks) {
+      await insertRawRecord(STORE_TASKS, Object.assign({}, task, { projectId: projectId }));
+    }
+
+    for (const comment of data.comments) {
+      const newScheduleItemId = scheduleIdMap[comment.scheduleItemId];
+      if (newScheduleItemId) {
+        await insertRawRecord(STORE_COMMENTS, Object.assign({}, comment, { scheduleItemId: newScheduleItemId }));
+      }
+    }
+
+    for (const memo of data.memos) {
+      await insertRawRecord(STORE_MEMOS, Object.assign({}, memo, { projectId: projectId }));
+    }
+
+    for (const quickMemo of data.quickMemos) {
+      await insertRawRecord(STORE_QUICK_MEMOS, Object.assign({}, quickMemo, { projectId: projectId }));
+    }
+
+    const mindMapIdMap = {};
+    for (const node of data.mindMapNodes) {
+      const newId = await insertRawRecord(STORE_MINDMAP_NODES, Object.assign({}, node, { projectId: projectId }));
+      mindMapIdMap[node.id] = newId;
+    }
+    for (const node of data.mindMapNodes) {
+      if (node.parentId) {
+        await updateMindMapNode(mindMapIdMap[node.id], { parentId: mindMapIdMap[node.parentId] || null });
+      }
+    }
+  }
+
   /* ==== Section: UI描画 ==== */
 
   /* ---- Sub-section: Projects ---- */
@@ -2248,6 +2557,148 @@ button:disabled {
   function closeTaskEditModal() {
     editingTaskId = null;
     document.getElementById("task-edit-modal").hidden = true;
+  }
+
+  /* ---- Sub-section: Snapshot Panel ---- */
+
+  /**
+   * スナップショットパネルを、選択中プロジェクトの一覧を表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openSnapshotPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    await renderSnapshotList();
+    document.getElementById("snapshot-panel").hidden = false;
+  }
+
+  /**
+   * スナップショットパネルを閉じる
+   */
+  function closeSnapshotPanel() {
+    document.getElementById("snapshot-panel").hidden = true;
+  }
+
+  /**
+   * スナップショット一覧を再描画する（新しい順）
+   * @returns {Promise<void>}
+   */
+  async function renderSnapshotList() {
+    const snapshots = await getSnapshotsByProject(currentProjectId);
+    document.getElementById("snapshot-count-header").textContent = snapshots.length + "件";
+    document.getElementById("snapshot-count-footer").textContent = snapshots.length + "件のスナップショット";
+
+    const container = document.getElementById("snapshot-list");
+    if (snapshots.length === 0) {
+      container.innerHTML = "<p>スナップショットがありません</p>";
+      return;
+    }
+
+    container.innerHTML = snapshots
+      .map((snapshot) => {
+        const items = snapshot.data.scheduleItems || [];
+        const startDates = items.map((i) => i.startDate).filter(Boolean).sort();
+        const endDates = items.map((i) => i.endDate).filter(Boolean).sort();
+        const rangeText = startDates.length && endDates.length
+          ? startDates[0] + "〜" + endDates[endDates.length - 1]
+          : "—";
+        return (
+          "<div class=\"snapshot-item\" data-snapshot-id=\"" + snapshot.id + "\">" +
+          "<div class=\"snapshot-item-row\">" +
+          "<div>" +
+          "<div class=\"snapshot-item-name\">" + escapeHtml(snapshot.data.project.name) + "</div>" +
+          "<div class=\"snapshot-item-meta\">" + escapeHtml(formatTimestamp(snapshot.createdAt)) + " ・ 作業" + items.length + "件 ・ " + escapeHtml(rangeText) + "</div>" +
+          "</div>" +
+          "<div class=\"snapshot-item-actions\">" +
+          "<button class=\"btn-snapshot-compare\" title=\"現在と比較\">«</button>" +
+          "<button class=\"btn-snapshot-restore\" title=\"この状態に復元\">⇔</button>" +
+          "<button class=\"btn-snapshot-delete\" title=\"削除\">🗑️</button>" +
+          "</div>" +
+          "</div>" +
+          "<div class=\"snapshot-diff\" hidden></div>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  /**
+   * スナップショットと現在の状態(スケジュール項目)を比較し、追加/削除/変更された作業を一覧表示する。
+   * 既に開いていれば閉じる(トグル)
+   * @param {number} snapshotId
+   * @param {HTMLElement} diffEl
+   * @returns {Promise<void>}
+   */
+  async function toggleSnapshotDiff(snapshotId, diffEl) {
+    if (!diffEl.hidden) {
+      diffEl.hidden = true;
+      diffEl.innerHTML = "";
+      return;
+    }
+
+    const snapshot = await getSnapshotById(snapshotId);
+    const currentItems = await getScheduleItemsByProject(currentProjectId);
+    const snapshotItems = snapshot.data.scheduleItems || [];
+
+    const currentTitles = new Set(currentItems.map((i) => i.title));
+    const snapshotTitles = new Set(snapshotItems.map((i) => i.title));
+
+    const added = currentItems.filter((i) => !snapshotTitles.has(i.title)).map((i) => i.title);
+    const removed = snapshotItems.filter((i) => !currentTitles.has(i.title)).map((i) => i.title);
+    const changed = [];
+    currentItems.forEach((cur) => {
+      const snap = snapshotItems.find((s) => s.title === cur.title);
+      if (snap && (snap.startDate !== cur.startDate || snap.endDate !== cur.endDate || snap.status !== cur.status)) {
+        changed.push(cur.title);
+      }
+    });
+
+    const buildList = (arr) =>
+      arr.length ? "<ul>" + arr.map((t) => "<li>" + escapeHtml(t) + "</li>").join("") + "</ul>" : "<p>なし</p>";
+
+    diffEl.innerHTML =
+      "<h4>追加された作業</h4>" + buildList(added) +
+      "<h4>削除された作業</h4>" + buildList(removed) +
+      "<h4>変更された作業(日付・状態)</h4>" + buildList(changed);
+    diffEl.hidden = false;
+  }
+
+  /**
+   * 確認の上、スナップショットの状態にプロジェクトを復元する
+   * @param {number} snapshotId
+   * @returns {Promise<void>}
+   */
+  async function restoreSnapshotWithConfirm(snapshotId) {
+    if (currentProjectLocked) {
+      window.alert("プロジェクトがロックされているため復元できません");
+      return;
+    }
+    const ok = window.confirm("この状態に復元しますか？現在のプロジェクトデータは上書きされます。");
+    if (!ok) return;
+    await restoreSnapshotById(snapshotId);
+    await refreshProjectSelect();
+    await renderMainArea();
+    await renderSnapshotList();
+    await addChangeLog(currentProjectId, "スナップショットの状態に復元しました");
+  }
+
+  /**
+   * 確認の上、スナップショットを削除する
+   * @param {number} snapshotId
+   * @returns {Promise<void>}
+   */
+  async function deleteSnapshotWithConfirm(snapshotId) {
+    if (currentProjectLocked) {
+      window.alert("プロジェクトがロックされているため削除できません");
+      return;
+    }
+    const ok = window.confirm("このスナップショットを削除しますか？");
+    if (!ok) return;
+    await deleteSnapshot(snapshotId);
+    await renderSnapshotList();
+    await addChangeLog(currentProjectId, "スナップショットを削除しました");
   }
 
   /* ---- Sub-section: Schedule Edit Modal ---- */
@@ -3225,6 +3676,40 @@ button:disabled {
       await renderTaskBoard();
       if (task) {
         await addChangeLog(currentProjectId, "タスク「" + task.title + "」を削除しました");
+      }
+    });
+
+    document.getElementById("btn-snapshots").addEventListener("click", async () => {
+      await openSnapshotPanel();
+    });
+
+    document.getElementById("btn-close-snapshot-panel").addEventListener("click", () => {
+      closeSnapshotPanel();
+    });
+
+    document.getElementById("btn-save-snapshot").addEventListener("click", async () => {
+      if (currentProjectId === null) return;
+      await createSnapshot(currentProjectId);
+      await renderSnapshotList();
+      await addChangeLog(currentProjectId, "スナップショットを保存しました");
+    });
+
+    document.getElementById("snapshot-list").addEventListener("click", async (event) => {
+      const item = event.target.closest(".snapshot-item");
+      if (!item) return;
+      const snapshotId = Number(item.dataset.snapshotId);
+
+      if (event.target.closest(".btn-snapshot-compare")) {
+        await toggleSnapshotDiff(snapshotId, item.querySelector(".snapshot-diff"));
+        return;
+      }
+      if (event.target.closest(".btn-snapshot-restore")) {
+        await restoreSnapshotWithConfirm(snapshotId);
+        return;
+      }
+      if (event.target.closest(".btn-snapshot-delete")) {
+        await deleteSnapshotWithConfirm(snapshotId);
+        return;
       }
     });
 
