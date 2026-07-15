@@ -296,14 +296,6 @@ body {
   color: #6b7280;
 }
 
-.side-panel textarea {
-  font-size: 14px;
-  padding: 4px 6px;
-  box-sizing: border-box;
-  width: 100%;
-  resize: vertical;
-}
-
 .milestone-list-item {
   display: flex;
   align-items: center;
@@ -573,6 +565,7 @@ button:disabled {
   <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
   <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
   <button id="btn-milestones">マイルストーン</button>
+  <button id="btn-comments">コメント</button>
   <button id="btn-edit-project">編集</button>
   <button id="btn-history">変更履歴</button>
   <button id="btn-memos">メモ</button>
@@ -704,14 +697,10 @@ button:disabled {
 
 <aside id="comment-panel" class="side-panel" hidden>
   <div class="side-panel-header">
-    <h2 id="comment-panel-title">コメント</h2>
+    <h2>コメント</h2>
     <button id="btn-close-comment-panel">閉じる</button>
   </div>
   <div id="comment-panel-list" class="side-panel-body"></div>
-  <textarea id="comment-panel-input" rows="2" placeholder="コメントを入力"></textarea>
-  <div class="modal-actions">
-    <button id="btn-panel-send-comment">送信</button>
-  </div>
 </aside>
 
 <script>
@@ -757,7 +746,6 @@ button:disabled {
   let currentMemoId = null;
   let memoViewMode = "edit";
   let memoSaveTimer = null;
-  let commentPanelScheduleItemId = null;
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -2038,17 +2026,15 @@ button:disabled {
   /* ---- Sub-section: Comment Panel ---- */
 
   /**
-   * コメントパネルを、対象作業のコメント一覧を表示した状態で開く
-   * @param {Object} item
+   * コメントパネルを、選択中プロジェクトの全作業のコメントを新しい順に表示した状態で開く
    * @returns {Promise<void>}
    */
-  async function openCommentPanel(item) {
-    commentPanelScheduleItemId = item.id;
-    document.getElementById("comment-panel-title").textContent = "コメント: " + item.title;
-    document.getElementById("comment-panel-input").value = "";
-    document.getElementById("comment-panel-input").disabled = currentProjectLocked;
-    document.getElementById("btn-panel-send-comment").disabled = currentProjectLocked;
-    await renderCommentPanelList(item.id);
+  async function openCommentPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    await renderCommentPanelList();
     document.getElementById("comment-panel").hidden = false;
   }
 
@@ -2056,18 +2042,39 @@ button:disabled {
    * コメントパネルを閉じる
    */
   function closeCommentPanel() {
-    commentPanelScheduleItemId = null;
     document.getElementById("comment-panel").hidden = true;
   }
 
   /**
-   * コメントパネル内のコメント一覧を再描画する（古い順）
-   * @param {number} scheduleItemId
+   * コメントパネル内に、選択中プロジェクトの全作業のコメントを新しい順にまとめて表示する
    * @returns {Promise<void>}
    */
-  async function renderCommentPanelList(scheduleItemId) {
-    const comments = await getCommentsByScheduleItem(scheduleItemId);
-    document.getElementById("comment-panel-list").innerHTML = buildCommentListHtml(comments);
+  async function renderCommentPanelList() {
+    const items = await getScheduleItemsByProject(currentProjectId);
+    const commentsByItem = await Promise.all(
+      items.map(async (item) => {
+        const comments = await getCommentsByScheduleItem(item.id);
+        return comments.map((comment) => ({ itemTitle: item.title, comment: comment }));
+      })
+    );
+    const entries = commentsByItem.flat().sort((a, b) => b.comment.timestamp - a.comment.timestamp);
+    const container = document.getElementById("comment-panel-list");
+
+    if (entries.length === 0) {
+      container.innerHTML = "<p>コメントがありません</p>";
+      return;
+    }
+
+    container.innerHTML = entries
+      .map((entry) => {
+        return (
+          "<div class=\"comment-list-item\">" +
+          "<span class=\"comment-timestamp\">" + escapeHtml(formatTimestamp(entry.comment.timestamp)) + " - 作業「" + escapeHtml(entry.itemTitle) + "」</span>" +
+          escapeHtml(entry.comment.text) +
+          "</div>"
+        );
+      })
+      .join("");
   }
 
   /* ---- Sub-section: Schedule Table ---- */
@@ -2134,7 +2141,6 @@ button:disabled {
           startCell + endCell + statusCell +
           "<td class=\"row-actions\">" +
           "<button class=\"btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\">編集</button>" +
-          "<button class=\"btn-row-comment\" data-item-id=\"" + item.id + "\" title=\"コメント\">コメント</button>" +
           "<button class=\"btn-row-delete\" data-item-id=\"" + item.id + "\" title=\"削除\"" + disabledAttr + ">削除</button>" +
           "<button class=\"btn-row-move-up\" data-item-id=\"" + item.id + "\" title=\"上へ\"" + (isFirst || currentProjectLocked ? " disabled" : "") + ">▲</button>" +
           "<button class=\"btn-row-move-down\" data-item-id=\"" + item.id + "\" title=\"下へ\"" + (isLast || currentProjectLocked ? " disabled" : "") + ">▼</button>" +
@@ -2636,12 +2642,6 @@ button:disabled {
         return;
       }
 
-      if (button.classList.contains("btn-row-comment")) {
-        const item = await getScheduleItemById(itemId);
-        await openCommentPanel(item);
-        return;
-      }
-
       if (currentProjectLocked) return;
 
       if (button.classList.contains("btn-row-delete")) {
@@ -2711,22 +2711,12 @@ button:disabled {
       await addChangeLog(currentProjectId, "作業「" + item.title + "」にコメントを追加しました");
     });
 
-    document.getElementById("btn-close-comment-panel").addEventListener("click", () => {
-      closeCommentPanel();
+    document.getElementById("btn-comments").addEventListener("click", async () => {
+      await openCommentPanel();
     });
 
-    document.getElementById("btn-panel-send-comment").addEventListener("click", async () => {
-      if (currentProjectLocked) return;
-      const text = document.getElementById("comment-panel-input").value.trim();
-      if (!text) {
-        window.alert("コメントを入力してください");
-        return;
-      }
-      const item = await getScheduleItemById(commentPanelScheduleItemId);
-      await addComment(commentPanelScheduleItemId, text);
-      document.getElementById("comment-panel-input").value = "";
-      await renderCommentPanelList(commentPanelScheduleItemId);
-      await addChangeLog(currentProjectId, "作業「" + item.title + "」にコメントを追加しました");
+    document.getElementById("btn-close-comment-panel").addEventListener("click", () => {
+      closeCommentPanel();
     });
 
     document.getElementById("btn-expand-all").addEventListener("click", async () => {
