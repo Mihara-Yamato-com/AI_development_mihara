@@ -321,6 +321,12 @@ button:disabled {
   margin-bottom: 8px;
 }
 
+.side-panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .side-panel-header h2 {
   margin: 0;
   font-size: 16px;
@@ -341,6 +347,164 @@ button:disabled {
   display: block;
   font-size: 11px;
   color: #6b7280;
+}
+
+/* ==== Section: Memo Panel ==== */
+.memo-panel {
+  width: 780px;
+}
+
+.memo-panel-body {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.memo-list-column {
+  width: 170px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e5e7eb;
+  padding-right: 8px;
+}
+
+.memo-list-column #btn-new-memo {
+  margin-bottom: 8px;
+}
+
+#memo-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.memo-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.memo-list-item:hover {
+  background: #f3f4f6;
+}
+
+.memo-list-item.is-selected {
+  background: #e0e7ff;
+}
+
+.memo-list-item .memo-list-item-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-list-item button {
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.memo-editor-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#memo-title-input {
+  font-size: 14px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+}
+
+.memo-view-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.memo-view-toggle button.is-active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.memo-editor-area {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  min-height: 0;
+}
+
+.memo-body-textarea {
+  flex: 1;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 6px;
+  box-sizing: border-box;
+  resize: none;
+}
+
+.memo-preview-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.memo-preview-pane h1,
+.memo-preview-pane h2,
+.memo-preview-pane h3 {
+  margin: 8px 0 4px;
+}
+
+.memo-preview-pane p {
+  margin: 4px 0;
+}
+
+/* ==== Section: Quick Memo Panel ==== */
+#quick-memo-input {
+  font-size: 14px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+
+.quick-memo-list-item {
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.quick-memo-list-item pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  margin: 2px 0 0;
+}
+
+.quick-memo-list-item .quick-memo-timestamp {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.quick-memo-list-item button {
+  font-size: 11px;
+  flex: 0 0 auto;
 }
 </style>
 </head>
@@ -371,6 +535,8 @@ button:disabled {
   <button id="btn-milestones">マイルストーン</button>
   <button id="btn-edit-project">編集</button>
   <button id="btn-history">変更履歴</button>
+  <button id="btn-memos">メモ</button>
+  <button id="btn-quick-memos">即時メモ</button>
 </div>
 
 <main class="main-area">
@@ -449,13 +615,53 @@ button:disabled {
   <div id="history-list" class="side-panel-body"></div>
 </aside>
 
+<aside id="memo-panel" class="side-panel memo-panel" hidden>
+  <div class="side-panel-header">
+    <h2>メモ</h2>
+    <div class="side-panel-header-right">
+      <span id="memo-count">0件</span>
+      <button id="btn-close-memo-panel">閉じる</button>
+    </div>
+  </div>
+  <div class="memo-panel-body">
+    <div class="memo-list-column">
+      <button id="btn-new-memo">新規メモ</button>
+      <div id="memo-list"></div>
+    </div>
+    <div class="memo-editor-column">
+      <input id="memo-title-input" type="text" placeholder="メモの名前" disabled>
+      <div class="memo-view-toggle">
+        <button id="btn-memo-view-edit" class="is-active">編集</button>
+        <button id="btn-memo-view-preview">プレビュー</button>
+        <button id="btn-memo-view-split">分割</button>
+      </div>
+      <div id="memo-editor-area" class="memo-editor-area">
+        <textarea id="memo-body-input" class="memo-body-textarea" placeholder="Markdownで記述できます" disabled></textarea>
+        <div id="memo-preview-pane" class="memo-preview-pane" hidden></div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<aside id="quick-memo-panel" class="side-panel" hidden>
+  <div class="side-panel-header">
+    <h2>即時メモ</h2>
+    <button id="btn-close-quick-memo-panel">閉じる</button>
+  </div>
+  <textarea id="quick-memo-input" rows="3" placeholder="メモを入力(Markdown記法可、表示はそのまま)"></textarea>
+  <div class="modal-actions">
+    <button id="btn-add-quick-memo">追加</button>
+  </div>
+  <div id="quick-memo-list" class="side-panel-body"></div>
+</aside>
+
 <script>
 (function () {
   "use strict";
 
   /* ==== Section: 初期化 ==== */
   const DB_NAME = "GantForgeDB";
-  const DB_VERSION = 4;
+  const DB_VERSION = 5;
   const STORE_PROJECTS = "projects";
   const STORE_SCHEDULE_ITEMS = "scheduleItems";
   const INDEX_SCHEDULE_ITEMS_BY_PROJECT = "by_projectId";
@@ -463,6 +669,10 @@ button:disabled {
   const INDEX_MILESTONES_BY_PROJECT = "by_projectId";
   const STORE_CHANGE_LOGS = "changeLogs";
   const INDEX_CHANGE_LOGS_BY_PROJECT = "by_projectId";
+  const STORE_MEMOS = "memos";
+  const INDEX_MEMOS_BY_PROJECT = "by_projectId";
+  const STORE_QUICK_MEMOS = "quickMemos";
+  const INDEX_QUICK_MEMOS_BY_PROJECT = "by_projectId";
 
   const STATUS_NOT_STARTED = "未着手";
   const STATUS_IN_PROGRESS = "進行中";
@@ -483,6 +693,9 @@ button:disabled {
   let isExpandAllToggled = false;
   let visibleColumns = { startDate: true, endDate: true, status: true };
   let editingScheduleItemId = null;
+  let currentMemoId = null;
+  let memoViewMode = "edit";
+  let memoSaveTimer = null;
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -549,6 +762,26 @@ button:disabled {
             autoIncrement: true,
           });
           changeLogStore.createIndex(INDEX_CHANGE_LOGS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_MEMOS)) {
+          const memoStore = database.createObjectStore(STORE_MEMOS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          memoStore.createIndex(INDEX_MEMOS_BY_PROJECT, "projectId", {
+            unique: false,
+          });
+        }
+
+        if (!database.objectStoreNames.contains(STORE_QUICK_MEMOS)) {
+          const quickMemoStore = database.createObjectStore(STORE_QUICK_MEMOS, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          quickMemoStore.createIndex(INDEX_QUICK_MEMOS_BY_PROJECT, "projectId", {
             unique: false,
           });
         }
@@ -960,6 +1193,214 @@ button:disabled {
     );
   }
 
+  /* ---- Sub-section: Memos ---- */
+
+  /**
+   * メモを新規追加する（題名・本文とも空で登録される）
+   * @param {number} projectId
+   * @returns {Promise<number>} 追加されたメモのid
+   */
+  function addMemo(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MEMOS, "readwrite");
+      const store = tx.objectStore(STORE_MEMOS);
+      const request = store.add({
+        projectId: projectId,
+        title: "",
+        body: "",
+        updatedAt: Date.now(),
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトのメモを、更新が新しい順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getMemosByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MEMOS, "readonly");
+      const store = tx.objectStore(STORE_MEMOS);
+      const index = store.index(INDEX_MEMOS_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const memos = event.target.result;
+        memos.sort((a, b) => b.updatedAt - a.updatedAt);
+        resolve(memos);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * idを指定してメモを1件取得する
+   * @param {number} id
+   * @returns {Promise<Object>}
+   */
+  function getMemoById(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MEMOS, "readonly");
+      const store = tx.objectStore(STORE_MEMOS);
+      const request = store.get(id);
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * メモの内容を更新する
+   * @param {number} id
+   * @param {Object} changes - title/bodyのうち更新したい項目
+   * @returns {Promise<void>}
+   */
+  function updateMemo(id, changes) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MEMOS, "readwrite");
+      const store = tx.objectStore(STORE_MEMOS);
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const memo = getRequest.result;
+        if (!memo) {
+          resolve();
+          return;
+        }
+        Object.assign(memo, changes, { updatedAt: Date.now() });
+        const putRequest = store.put(memo);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = (event) => reject(event.target.error);
+      };
+      getRequest.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * メモを削除する
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteMemo(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MEMOS, "readwrite");
+      const store = tx.objectStore(STORE_MEMOS);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /* ---- Sub-section: Quick Memos ---- */
+
+  /**
+   * 即時メモを1件追加する
+   * @param {number} projectId
+   * @param {string} text
+   * @returns {Promise<number>} 追加された即時メモのid
+   */
+  function addQuickMemo(projectId, text) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_QUICK_MEMOS, "readwrite");
+      const store = tx.objectStore(STORE_QUICK_MEMOS);
+      const request = store.add({
+        projectId: projectId,
+        text: text,
+        timestamp: Date.now(),
+      });
+      request.onsuccess = (event) => resolve(event.target.result);
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 指定プロジェクトの即時メモを、新しい順に取得する
+   * @param {number} projectId
+   * @returns {Promise<Array<Object>>}
+   */
+  function getQuickMemosByProject(projectId) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_QUICK_MEMOS, "readonly");
+      const store = tx.objectStore(STORE_QUICK_MEMOS);
+      const index = store.index(INDEX_QUICK_MEMOS_BY_PROJECT);
+      const request = index.getAll(IDBKeyRange.only(projectId));
+      request.onsuccess = (event) => {
+        const quickMemos = event.target.result;
+        quickMemos.sort((a, b) => b.timestamp - a.timestamp);
+        resolve(quickMemos);
+      };
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /**
+   * 即時メモを削除する
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  function deleteQuickMemo(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_QUICK_MEMOS, "readwrite");
+      const store = tx.objectStore(STORE_QUICK_MEMOS);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = (event) => reject(event.target.error);
+    });
+  }
+
+  /* ---- Sub-section: Markdown Rendering ---- */
+
+  /**
+   * 簡易マークダウンをHTMLに変換する（見出し#〜###・太字・斜体・インラインコード・箇条書き・段落のみ対応）
+   * @param {string} source
+   * @returns {string}
+   */
+  function renderMarkdown(source) {
+    const applyInline = (text) => {
+      let html = escapeHtml(text);
+      html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      return html;
+    };
+
+    const lines = source.split("\n");
+    const htmlParts = [];
+    let listItems = null;
+
+    const flushList = () => {
+      if (listItems) {
+        htmlParts.push("<ul>" + listItems.join("") + "</ul>");
+        listItems = null;
+      }
+    };
+
+    lines.forEach((line) => {
+      const headerMatch = line.match(/^(#{1,3})\s+(.*)$/);
+      if (headerMatch) {
+        flushList();
+        const level = headerMatch[1].length;
+        htmlParts.push("<h" + level + ">" + applyInline(headerMatch[2]) + "</h" + level + ">");
+        return;
+      }
+      const listMatch = line.match(/^[-*]\s+(.*)$/);
+      if (listMatch) {
+        if (!listItems) listItems = [];
+        listItems.push("<li>" + applyInline(listMatch[1]) + "</li>");
+        return;
+      }
+      flushList();
+      if (line.trim() === "") {
+        return;
+      }
+      htmlParts.push("<p>" + applyInline(line) + "</p>");
+    });
+    flushList();
+
+    return htmlParts.join("") || "<p><em>(内容がありません)</em></p>";
+  }
+
   /* ==== Section: UI描画 ==== */
 
   /* ---- Sub-section: Projects ---- */
@@ -1012,7 +1453,7 @@ button:disabled {
     lockButton.disabled = currentProjectId === null;
     lockButton.classList.toggle("is-locked", currentProjectLocked);
 
-    ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label"].forEach((id) => {
+    ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label", "btn-new-memo", "quick-memo-input", "btn-add-quick-memo"].forEach((id) => {
       document.getElementById(id).disabled = currentProjectLocked;
     });
   }
@@ -1220,6 +1661,171 @@ button:disabled {
           "<div class=\"history-list-item\">" +
           "<span class=\"history-timestamp\">" + escapeHtml(formatTimestamp(log.timestamp)) + "</span>" +
           escapeHtml(log.message) +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  /* ---- Sub-section: Memo Panel ---- */
+
+  /**
+   * メモパネルを、選択中プロジェクトのメモ一覧を表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openMemoPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    currentMemoId = null;
+    setMemoViewMode("edit");
+    await renderMemoList();
+    loadMemoIntoEditor(null);
+    document.getElementById("memo-panel").hidden = false;
+  }
+
+  /**
+   * メモパネルを閉じる
+   */
+  function closeMemoPanel() {
+    clearTimeout(memoSaveTimer);
+    document.getElementById("memo-panel").hidden = true;
+  }
+
+  /**
+   * メモ一覧を再描画する（更新が新しい順）
+   * @returns {Promise<void>}
+   */
+  async function renderMemoList() {
+    const memos = await getMemosByProject(currentProjectId);
+    document.getElementById("memo-count").textContent = memos.length + "件";
+
+    const container = document.getElementById("memo-list");
+    if (memos.length === 0) {
+      container.innerHTML = "<p>メモがありません</p>";
+      return;
+    }
+
+    container.innerHTML = memos
+      .map((memo) => {
+        const selectedClass = memo.id === currentMemoId ? " is-selected" : "";
+        const title = memo.title || "(無題)";
+        return (
+          "<div class=\"memo-list-item" + selectedClass + "\" data-memo-id=\"" + memo.id + "\">" +
+          "<span class=\"memo-list-item-title\">" + escapeHtml(title) + "</span>" +
+          "<button class=\"btn-delete-memo\" data-memo-id=\"" + memo.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  /**
+   * 対象メモの内容をエディタ(題名・本文)に読み込む。nullの場合は空にして入力欄を無効化する
+   * @param {Object|null} memo
+   */
+  function loadMemoIntoEditor(memo) {
+    const titleInput = document.getElementById("memo-title-input");
+    const bodyInput = document.getElementById("memo-body-input");
+    titleInput.value = memo ? memo.title : "";
+    bodyInput.value = memo ? memo.body : "";
+    titleInput.disabled = !memo || currentProjectLocked;
+    bodyInput.disabled = !memo || currentProjectLocked;
+    renderMemoPreview();
+  }
+
+  /**
+   * 現在の本文入力値でプレビューを再描画する
+   */
+  function renderMemoPreview() {
+    const body = document.getElementById("memo-body-input").value;
+    document.getElementById("memo-preview-pane").innerHTML = renderMarkdown(body);
+  }
+
+  /**
+   * メモの表示モード(edit/preview/split)を切り替える
+   * @param {"edit"|"preview"|"split"} mode
+   */
+  function setMemoViewMode(mode) {
+    memoViewMode = mode;
+    const textarea = document.getElementById("memo-body-input");
+    const preview = document.getElementById("memo-preview-pane");
+    const editorArea = document.getElementById("memo-editor-area");
+
+    textarea.hidden = mode === "preview";
+    preview.hidden = mode === "edit";
+    editorArea.classList.toggle("is-split", mode === "split");
+
+    ["edit", "preview", "split"].forEach((m) => {
+      document.getElementById("btn-memo-view-" + m).classList.toggle("is-active", m === mode);
+    });
+
+    if (mode !== "edit") {
+      renderMemoPreview();
+    }
+  }
+
+  /**
+   * タイトル・本文の入力内容を、少し待ってからIndexedDBに保存する(打鍵ごとの書き込みを避けるためのdebounce)
+   */
+  function scheduleMemoSave() {
+    if (currentMemoId === null) return;
+    clearTimeout(memoSaveTimer);
+    memoSaveTimer = setTimeout(async () => {
+      const title = document.getElementById("memo-title-input").value;
+      const body = document.getElementById("memo-body-input").value;
+      await updateMemo(currentMemoId, { title: title, body: body });
+    }, 400);
+  }
+
+  /* ---- Sub-section: Quick Memo Panel ---- */
+
+  /**
+   * 即時メモパネルを、選択中プロジェクトの一覧を表示した状態で開く
+   * @returns {Promise<void>}
+   */
+  async function openQuickMemoPanel() {
+    if (currentProjectId === null) {
+      window.alert("先にプロジェクトを作成・選択してください");
+      return;
+    }
+    document.getElementById("quick-memo-input").value = "";
+    document.getElementById("quick-memo-input").disabled = currentProjectLocked;
+    document.getElementById("btn-add-quick-memo").disabled = currentProjectLocked;
+    await renderQuickMemoList();
+    document.getElementById("quick-memo-panel").hidden = false;
+  }
+
+  /**
+   * 即時メモパネルを閉じる
+   */
+  function closeQuickMemoPanel() {
+    document.getElementById("quick-memo-panel").hidden = true;
+  }
+
+  /**
+   * 即時メモ一覧を再描画する（新しい順、入力そのままを表示しMarkdownはレンダリングしない）
+   * @returns {Promise<void>}
+   */
+  async function renderQuickMemoList() {
+    const quickMemos = await getQuickMemosByProject(currentProjectId);
+    const container = document.getElementById("quick-memo-list");
+
+    if (quickMemos.length === 0) {
+      container.innerHTML = "<p>即時メモがありません</p>";
+      return;
+    }
+
+    container.innerHTML = quickMemos
+      .map((quickMemo) => {
+        return (
+          "<div class=\"quick-memo-list-item\">" +
+          "<div>" +
+          "<span class=\"quick-memo-timestamp\">" + escapeHtml(formatTimestamp(quickMemo.timestamp)) + "</span>" +
+          "<pre>" + escapeHtml(quickMemo.text) + "</pre>" +
+          "</div>" +
+          "<button class=\"btn-delete-quick-memo\" data-quick-memo-id=\"" + quickMemo.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
           "</div>"
         );
       })
@@ -1884,6 +2490,115 @@ button:disabled {
 
     document.getElementById("btn-close-history-panel").addEventListener("click", () => {
       closeHistoryPanel();
+    });
+
+    document.getElementById("btn-memos").addEventListener("click", async () => {
+      await openMemoPanel();
+    });
+
+    document.getElementById("btn-close-memo-panel").addEventListener("click", () => {
+      closeMemoPanel();
+    });
+
+    document.getElementById("btn-new-memo").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
+      const newId = await addMemo(currentProjectId);
+      currentMemoId = newId;
+      setMemoViewMode("edit");
+      await renderMemoList();
+      loadMemoIntoEditor({ id: newId, title: "", body: "" });
+      document.getElementById("memo-title-input").focus();
+      await addChangeLog(currentProjectId, "メモを追加しました");
+    });
+
+    document.getElementById("memo-list").addEventListener("click", async (event) => {
+      const deleteButton = event.target.closest(".btn-delete-memo");
+      if (deleteButton) {
+        if (currentProjectLocked) return;
+        const ok = window.confirm("このメモを削除しますか？");
+        if (!ok) return;
+        const id = Number(deleteButton.dataset.memoId);
+        const memo = await getMemoById(id);
+        await deleteMemo(id);
+        if (currentMemoId === id) {
+          currentMemoId = null;
+          loadMemoIntoEditor(null);
+        }
+        await renderMemoList();
+        if (memo) {
+          await addChangeLog(currentProjectId, "メモ「" + (memo.title || "(無題)") + "」を削除しました");
+        }
+        return;
+      }
+
+      const listItem = event.target.closest(".memo-list-item");
+      if (!listItem) return;
+      const id = Number(listItem.dataset.memoId);
+      currentMemoId = id;
+      const memo = await getMemoById(id);
+      loadMemoIntoEditor(memo);
+      await renderMemoList();
+    });
+
+    document.getElementById("memo-title-input").addEventListener("input", (event) => {
+      if (currentMemoId === null || currentProjectLocked) return;
+      const listItem = document.querySelector(".memo-list-item[data-memo-id=\"" + currentMemoId + "\"] .memo-list-item-title");
+      if (listItem) {
+        listItem.textContent = event.target.value || "(無題)";
+      }
+      scheduleMemoSave();
+    });
+
+    document.getElementById("memo-body-input").addEventListener("input", () => {
+      if (currentMemoId === null || currentProjectLocked) return;
+      if (memoViewMode !== "edit") {
+        renderMemoPreview();
+      }
+      scheduleMemoSave();
+    });
+
+    document.getElementById("btn-memo-view-edit").addEventListener("click", () => {
+      setMemoViewMode("edit");
+    });
+
+    document.getElementById("btn-memo-view-preview").addEventListener("click", () => {
+      setMemoViewMode("preview");
+    });
+
+    document.getElementById("btn-memo-view-split").addEventListener("click", () => {
+      setMemoViewMode("split");
+    });
+
+    document.getElementById("btn-quick-memos").addEventListener("click", async () => {
+      await openQuickMemoPanel();
+    });
+
+    document.getElementById("btn-close-quick-memo-panel").addEventListener("click", () => {
+      closeQuickMemoPanel();
+    });
+
+    document.getElementById("btn-add-quick-memo").addEventListener("click", async () => {
+      if (currentProjectLocked) return;
+      const text = document.getElementById("quick-memo-input").value.trim();
+      if (!text) {
+        window.alert("メモを入力してください");
+        return;
+      }
+      await addQuickMemo(currentProjectId, text);
+      document.getElementById("quick-memo-input").value = "";
+      await renderQuickMemoList();
+      await addChangeLog(currentProjectId, "即時メモを追加しました");
+    });
+
+    document.getElementById("quick-memo-list").addEventListener("click", async (event) => {
+      const deleteButton = event.target.closest(".btn-delete-quick-memo");
+      if (!deleteButton) return;
+      if (currentProjectLocked) return;
+      const ok = window.confirm("この即時メモを削除しますか？");
+      if (!ok) return;
+      await deleteQuickMemo(Number(deleteButton.dataset.quickMemoId));
+      await renderQuickMemoList();
+      await addChangeLog(currentProjectId, "即時メモを削除しました");
     });
 
     document.getElementById("btn-close-milestone-modal").addEventListener("click", () => {
