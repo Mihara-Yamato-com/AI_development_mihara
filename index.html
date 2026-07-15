@@ -23,10 +23,15 @@ body {
   color: #fff;
 }
 
-.app-header select,
-.app-header button {
+.app-header select {
   font-size: 14px;
   padding: 4px 8px;
+}
+
+.app-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-right: 4px;
 }
 
 /* ==== Section: Toolbar ==== */
@@ -39,9 +44,58 @@ body {
   border-bottom: 1px solid #d1d5db;
 }
 
-.toolbar button {
+.toolbar select {
   font-size: 14px;
   padding: 4px 8px;
+}
+
+/* ==== Section: Common Button / Icon Design System (docs/rules準拠) ==== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #111827;
+  background: #fff;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  flex-shrink: 0;
+}
+
+.btn-solid-blue {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.btn-outline-red {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.btn-outline-green {
+  color: #65a30d;
+  border-color: #65a30d;
+}
+
+.btn-outline-yellow {
+  color: #ca8a04;
+  border-color: #ca8a04;
+}
+
+.btn-outline-blue {
+  color: #2563eb;
+  border-color: #2563eb;
 }
 
 /* ==== Section: Main Area / Schedule Table ==== */
@@ -865,21 +919,130 @@ button:disabled {
 </style>
 </head>
 <body>
+<svg style="display:none" aria-hidden="true">
+  <!-- Heroicons(outline, MIT License)のデザイン言語(24x24, 線画, 角丸)に沿って自作したシンボルスプライト -->
+  <symbol id="icon-plus-circle" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v8" />
+    <path d="M8 12h8" />
+  </symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h16" />
+    <path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
+    <path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+  </symbol>
+  <symbol id="icon-arrow-down-tray" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v12" />
+    <path d="M7 10l5 5 5-5" />
+    <path d="M4 19h16" />
+  </symbol>
+  <symbol id="icon-arrow-up-tray" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 15V3" />
+    <path d="M7 8l5-5 5 5" />
+    <path d="M4 19h16" />
+  </symbol>
+  <symbol id="icon-table-cells" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="1.5" />
+    <path d="M4 9h16" />
+    <path d="M4 15h16" />
+    <path d="M10 4v16" />
+    <path d="M16 4v16" />
+  </symbol>
+  <symbol id="icon-document-arrow-down" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" />
+    <path d="M14 3v5h5" />
+    <path d="M12 12v6" />
+    <path d="M9.5 15.5L12 18l2.5-2.5" />
+  </symbol>
+  <symbol id="icon-lock-closed" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="11" width="14" height="9" rx="1.5" />
+    <path d="M8 11V8a4 4 0 018 0v3" />
+  </symbol>
+  <symbol id="icon-lock-open" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="11" width="14" height="9" rx="1.5" />
+    <path d="M8 11V8a4 4 0 017.5-2" />
+  </symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  </symbol>
+  <symbol id="icon-calendar-days" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="5" width="16" height="15" rx="1.5" />
+    <path d="M4 10h16" />
+    <path d="M8 3v4" />
+    <path d="M16 3v4" />
+    <path d="M8 14h.01" />
+    <path d="M12 14h.01" />
+    <path d="M16 14h.01" />
+  </symbol>
+  <symbol id="icon-chevron-double-down" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 6l6 6 6-6" />
+    <path d="M6 13l6 6 6-6" />
+  </symbol>
+  <symbol id="icon-chevron-double-up" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 18l6-6 6 6" />
+    <path d="M6 11l6-6 6 6" />
+  </symbol>
+  <symbol id="icon-flag" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 3v18" />
+    <path d="M6 4h11l-2.5 4L17 12H6" />
+  </symbol>
+  <symbol id="icon-pencil-square" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20h4l10.5-10.5a2 2 0 000-2.8l-1.2-1.2a2 2 0 00-2.8 0L4 16v4z" />
+    <path d="M13.5 6.5l3 3" />
+  </symbol>
+  <symbol id="icon-clock" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l4 2" />
+  </symbol>
+  <symbol id="icon-chat-bubble" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 5h16a1 1 0 011 1v10a1 1 0 01-1 1H9l-5 4V6a1 1 0 011-1z" />
+  </symbol>
+  <symbol id="icon-document-text" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" />
+    <path d="M14 3v5h5" />
+    <path d="M8 13h8" />
+    <path d="M8 17h5" />
+  </symbol>
+  <symbol id="icon-bolt" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 2L4 14h6l-1 8 9-12h-6z" />
+  </symbol>
+  <symbol id="icon-view-columns" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="5" height="16" rx="1" />
+    <rect x="9.5" y="4" width="5" height="16" rx="1" />
+    <rect x="15" y="4" width="5" height="16" rx="1" />
+  </symbol>
+  <symbol id="icon-camera" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8h3l2-2h6l2 2h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
+    <circle cx="12" cy="13" r="3.5" />
+  </symbol>
+  <symbol id="icon-share" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="6" cy="12" r="2.5" />
+    <circle cx="18" cy="6" r="2.5" />
+    <circle cx="18" cy="18" r="2.5" />
+    <path d="M8.3 10.8l7.4-3.6" />
+    <path d="M8.3 13.2l7.4 3.6" />
+  </symbol>
+</svg>
+
 <header class="app-header">
+  <span class="app-title">GantForge</span>
   <label for="project-select">プロジェクト:</label>
   <select id="project-select"></select>
-  <button id="btn-new-project">新規プロジェクト作成</button>
-  <button id="btn-delete-project">プロジェクト削除</button>
-  <button id="btn-export-json">JSON出力</button>
-  <button id="btn-import-json">データ取込</button>
+  <button id="btn-new-project" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus-circle"></use></svg><span class="btn-label">新規プロジェクト作成</span></button>
+  <button id="btn-delete-project" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">プロジェクト削除</span></button>
+  <button id="btn-export-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-down-tray"></use></svg><span class="btn-label">JSON出力</span></button>
+  <button id="btn-import-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-up-tray"></use></svg><span class="btn-label">データ取込</span></button>
   <input id="import-json-file-input" type="file" accept="application/json" hidden>
-  <button id="btn-export-excel">Excel出力</button>
-  <button id="btn-print-pdf">PDF出力</button>
+  <button id="btn-export-excel" class="btn btn-outline-green"><svg class="btn-icon"><use href="#icon-table-cells"></use></svg><span class="btn-label">Excel出力</span></button>
+  <button id="btn-print-pdf" class="btn"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF出力</span></button>
 </header>
 
 <div class="toolbar">
-  <button id="btn-toggle-lock">ロック</button>
-  <button id="btn-add-schedule">スケジュール追加</button>
+  <button id="btn-toggle-lock" class="btn"><svg class="btn-icon"><use href="#icon-lock-open"></use></svg><span class="btn-label">ロック</span></button>
+  <button id="btn-add-schedule" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">スケジュール追加</span></button>
   <label for="period-select">表示単位:</label>
   <select id="period-select">
     <option value="day">日</option>
@@ -887,21 +1050,21 @@ button:disabled {
     <option value="month">月</option>
     <option value="quarter">3ヶ月</option>
   </select>
-  <button id="btn-today">今日</button>
-  <button id="btn-expand-all">全て開く</button>
+  <button id="btn-today" class="btn"><svg class="btn-icon"><use href="#icon-calendar-days"></use></svg><span class="btn-label">今日</span></button>
+  <button id="btn-expand-all" class="btn"><svg class="btn-icon"><use href="#icon-chevron-double-down"></use></svg><span class="btn-label">全て開く</span></button>
   <span>表示列:</span>
   <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
   <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
   <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
-  <button id="btn-milestones">マイルストーン</button>
-  <button id="btn-comments">コメント</button>
-  <button id="btn-edit-project">編集</button>
-  <button id="btn-history">変更履歴</button>
-  <button id="btn-memos">メモ</button>
-  <button id="btn-quick-memos">即時メモ</button>
-  <button id="btn-tasks">タスク管理</button>
-  <button id="btn-snapshots">スナップショット</button>
-  <button id="btn-mindmap">マインドマップ</button>
+  <button id="btn-milestones" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-flag"></use></svg><span class="btn-label">マイルストーン</span></button>
+  <button id="btn-comments" class="btn"><svg class="btn-icon"><use href="#icon-chat-bubble"></use></svg><span class="btn-label">コメント</span></button>
+  <button id="btn-edit-project" class="btn"><svg class="btn-icon"><use href="#icon-pencil-square"></use></svg><span class="btn-label">編集</span></button>
+  <button id="btn-history" class="btn"><svg class="btn-icon"><use href="#icon-clock"></use></svg><span class="btn-label">変更履歴</span></button>
+  <button id="btn-memos" class="btn"><svg class="btn-icon"><use href="#icon-document-text"></use></svg><span class="btn-label">メモ</span></button>
+  <button id="btn-quick-memos" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-bolt"></use></svg><span class="btn-label">即時メモ</span></button>
+  <button id="btn-tasks" class="btn btn-outline-blue"><svg class="btn-icon"><use href="#icon-view-columns"></use></svg><span class="btn-label">タスク管理</span></button>
+  <button id="btn-snapshots" class="btn"><svg class="btn-icon"><use href="#icon-camera"></use></svg><span class="btn-label">スナップショット</span></button>
+  <button id="btn-mindmap" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-share"></use></svg><span class="btn-label">マインドマップ</span></button>
 </div>
 
 <main class="main-area">
@@ -2724,7 +2887,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
    */
   function renderLockUI() {
     const lockButton = document.getElementById("btn-toggle-lock");
-    lockButton.textContent = currentProjectLocked ? "ロック解除" : "ロック";
+    lockButton.querySelector(".btn-label").textContent = currentProjectLocked ? "ロック解除" : "ロック";
+    lockButton.querySelector("use").setAttribute("href", currentProjectLocked ? "#icon-lock-closed" : "#icon-lock-open");
     lockButton.disabled = currentProjectId === null;
     lockButton.classList.toggle("is-locked", currentProjectLocked);
 
@@ -2761,7 +2925,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
    * isExpandAllToggledに応じて「全て開く」ボタンの表示ラベルを更新する
    */
   function renderExpandAllButton() {
-    document.getElementById("btn-expand-all").textContent = isExpandAllToggled ? "すべて閉じる" : "全て開く";
+    const expandButton = document.getElementById("btn-expand-all");
+    expandButton.querySelector(".btn-label").textContent = isExpandAllToggled ? "すべて閉じる" : "全て開く";
+    expandButton.querySelector("use").setAttribute("href", isExpandAllToggled ? "#icon-chevron-double-up" : "#icon-chevron-double-down");
   }
 
   /* ---- Sub-section: Schedule Hierarchy ---- */
