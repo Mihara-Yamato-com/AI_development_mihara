@@ -109,6 +109,30 @@ body {
   overflow: hidden;
 }
 
+.gantt-header-cell.is-saturday {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.gantt-header-cell.is-sunday-holiday {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.day-bg {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+
+.day-bg-saturday {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.day-bg-sunday-holiday {
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .gantt-row {
   position: relative;
   height: 28px;
@@ -1014,6 +1038,142 @@ button:disabled {
     return now;
   }
 
+  /* ---- Sub-section: Japanese Holiday Calculation ---- */
+
+  const holidaysByYearCache = {};
+
+  /**
+   * YYYY-MM-DD形式のキー文字列を作る
+   * @param {number} year
+   * @param {number} month - 1-12
+   * @param {number} day
+   * @returns {string}
+   */
+  function toDateKey(year, month, day) {
+    const mm = String(month).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    return year + "-" + mm + "-" + dd;
+  }
+
+  /**
+   * DateをYYYY-MM-DD形式のキー文字列に変換する
+   * @param {Date} date
+   * @returns {string}
+   */
+  function dateToKey(date) {
+    return toDateKey(date.getFullYear(), date.getMonth() + 1, date.getDate());
+  }
+
+  /**
+   * 指定した月の第nth月曜日のDateを返す（ハッピーマンデー祝日用）
+   * @param {number} year
+   * @param {number} month - 1-12
+   * @param {number} nth
+   * @returns {Date}
+   */
+  function getNthMondayOfMonth(year, month, nth) {
+    const firstOfMonth = new Date(year, month - 1, 1);
+    const dayOffsetToMonday = (8 - firstOfMonth.getDay()) % 7;
+    const day = 1 + dayOffsetToMonday + (nth - 1) * 7;
+    return new Date(year, month - 1, day);
+  }
+
+  /**
+   * 春分の日・秋分の日を近似式で計算する（2000〜2099年の範囲で有効）
+   * @param {number} year
+   * @param {"spring"|"autumn"} season
+   * @returns {number} 日(day)
+   */
+  function getEquinoxDay(year, season) {
+    const base = season === "spring" ? 20.8431 : 23.2488;
+    return Math.floor(base + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  }
+
+  /**
+   * 前後を祝日に挟まれた平日を「国民の休日」として追加する
+   * @param {Object<string,string>} holidays
+   */
+  function applyCitizensHoliday(holidays) {
+    const dates = Object.keys(holidays)
+      .map((key) => parseDateStr(key))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    for (let i = 0; i < dates.length - 1; i++) {
+      if (diffInDays(dates[i], dates[i + 1]) !== 2) continue;
+      const between = new Date(dates[i]);
+      between.setDate(between.getDate() + 1);
+      const key = dateToKey(between);
+      if (!holidays[key] && between.getDay() !== 0) {
+        holidays[key] = "国民の休日";
+      }
+    }
+  }
+
+  /**
+   * 日曜日と重なる祝日に振替休日を追加する
+   * @param {Object<string,string>} holidays
+   */
+  function applySubstituteHolidays(holidays) {
+    const sundayHolidayDates = Object.keys(holidays)
+      .map((key) => parseDateStr(key))
+      .filter((date) => date.getDay() === 0);
+
+    sundayHolidayDates.forEach((date) => {
+      const candidate = new Date(date);
+      do {
+        candidate.setDate(candidate.getDate() + 1);
+      } while (holidays[dateToKey(candidate)]);
+      holidays[dateToKey(candidate)] = "振替休日";
+    });
+  }
+
+  /**
+   * 指定年の日本の祝日一覧を計算する（振替休日・国民の休日を含む）
+   * @param {number} year
+   * @returns {Object<string,string>} YYYY-MM-DD -> 祝日名
+   */
+  function getHolidaysForYear(year) {
+    if (holidaysByYearCache[year]) return holidaysByYearCache[year];
+
+    const holidays = {};
+    const add = (month, day, name) => {
+      holidays[toDateKey(year, month, day)] = name;
+    };
+
+    add(1, 1, "元日");
+    add(1, getNthMondayOfMonth(year, 1, 2).getDate(), "成人の日");
+    add(2, 11, "建国記念の日");
+    add(2, 23, "天皇誕生日");
+    add(3, getEquinoxDay(year, "spring"), "春分の日");
+    add(4, 29, "昭和の日");
+    add(5, 3, "憲法記念日");
+    add(5, 4, "みどりの日");
+    add(5, 5, "こどもの日");
+    add(7, getNthMondayOfMonth(year, 7, 3).getDate(), "海の日");
+    add(8, 11, "山の日");
+    add(9, getNthMondayOfMonth(year, 9, 3).getDate(), "敬老の日");
+    add(9, getEquinoxDay(year, "autumn"), "秋分の日");
+    add(10, getNthMondayOfMonth(year, 10, 2).getDate(), "スポーツの日");
+    add(11, 3, "文化の日");
+    add(11, 23, "勤労感謝の日");
+
+    applyCitizensHoliday(holidays);
+    applySubstituteHolidays(holidays);
+
+    holidaysByYearCache[year] = holidays;
+    return holidays;
+  }
+
+  /**
+   * 指定日が日本の祝日であれば祝日名を返す
+   * @param {Date} date
+   * @returns {string|null}
+   */
+  function getHolidayName(date) {
+    const holidays = getHolidaysForYear(date.getFullYear());
+    return holidays[dateToKey(date)] || null;
+  }
+
   /**
    * 現在の表示単位(currentPeriod)に応じて、そのヘッダーセルにラベルを表示するか判定する
    * @param {Date} cellDate
@@ -1072,18 +1232,38 @@ button:disabled {
 
     const headerCells = [];
     const gridLines = [];
+    const dayBackgrounds = [];
     for (let i = 0; i < totalDays; i++) {
       const cellDate = new Date(rangeStart);
       cellDate.setDate(cellDate.getDate() + i);
       const showLabel = shouldShowDateLabel(cellDate, i);
+      const holidayName = getHolidayName(cellDate);
+      const dayOfWeek = cellDate.getDay();
+      const isSundayOrHoliday = dayOfWeek === 0 || holidayName !== null;
+      const isSaturday = dayOfWeek === 6 && !isSundayOrHoliday;
+
+      let headerCellClass = "";
+      if (isSundayOrHoliday) {
+        headerCellClass = " is-sunday-holiday";
+      } else if (isSaturday) {
+        headerCellClass = " is-saturday";
+      }
+      const titleAttr = holidayName ? " title=\"" + escapeHtml(holidayName) + "\"" : "";
+
       headerCells.push(
-        "<div class=\"gantt-header-cell\" style=\"width:" + dayWidthPx + "px\">" +
+        "<div class=\"gantt-header-cell" + headerCellClass + "\" style=\"width:" + dayWidthPx + "px\"" + titleAttr + ">" +
         (showLabel ? formatDateLabel(cellDate) : "") +
         "</div>"
       );
       if (showLabel) {
         gridLines.push(
           "<div class=\"grid-line\" style=\"left:" + (i * dayWidthPx) + "px; height:" + totalHeight + "px\"></div>"
+        );
+      }
+      if (isSundayOrHoliday || isSaturday) {
+        const dayBgClass = isSundayOrHoliday ? "day-bg-sunday-holiday" : "day-bg-saturday";
+        dayBackgrounds.push(
+          "<div class=\"day-bg " + dayBgClass + "\" style=\"left:" + (i * dayWidthPx) + "px; width:" + dayWidthPx + "px; height:" + totalHeight + "px\"></div>"
         );
       }
     }
@@ -1122,6 +1302,7 @@ button:disabled {
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
       "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
+      dayBackgrounds.join("") +
       gridLines.join("") +
       rows +
       todayLine +
