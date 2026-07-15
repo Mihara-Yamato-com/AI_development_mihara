@@ -62,9 +62,17 @@ body {
 .schedule-table th,
 .schedule-table td {
   border: 1px solid #d1d5db;
-  padding: 4px 8px;
+  padding: 0 8px;
   font-size: 13px;
   text-align: left;
+  height: 28px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.schedule-table thead th {
+  height: 20px;
 }
 
 .toggle-arrow {
