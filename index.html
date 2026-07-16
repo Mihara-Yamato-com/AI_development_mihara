@@ -6,7 +6,64 @@
 <style>
 /* ==== Section: Base Layout ==== */
 :root {
-  font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+  font-family: 'DM Sans', -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+
+  --white: #ffffff;
+
+  --text1: #172033;
+  --text2: #475569;
+  --text-muted: #64748b;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: #eff6ff;
+
+  --navy: #17345f;
+
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
+
+  --accent-yellow-green: #65a30d;
+
+  --status-not-started: #6b7280;
+  --status-in-progress: #ca8a04;
+  --status-completed: #16a34a;
+
+  --bord1: #e2e8f0;
+  --bord2: #cbd5e1;
+
+  --surface-muted: #f8fafc;
+  --surface-selected: #ffffff;
+  --surface-unselected: #f1f5f9;
+
+  --radius-s: 6px;
+  --radius: 8px;
+  --radius-l: 12px;
+
+  --shadow-s: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-m: 0 8px 24px rgba(15, 23, 42, 0.12);
+
+  --transition-fast: 150ms;
+  --transition-panel: 220ms;
+
+  --schedule-table-width: 420px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {
@@ -64,14 +121,45 @@ body {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
   padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid #111827;
-  background: #fff;
-  color: #111827;
+  border-radius: var(--radius);
+  border: 1px solid var(--bord2);
+  background: var(--white);
+  color: var(--text2);
+  cursor: pointer;
   white-space: nowrap;
+  user-select: none;
+  box-shadow: var(--shadow-s);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-muted);
+  border-color: var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .btn-icon {
@@ -84,29 +172,29 @@ body {
 }
 
 .btn-solid-blue {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
+  background: var(--primary);
+  color: var(--white);
+  border-color: var(--primary);
 }
 
 .btn-outline-red {
-  color: #dc2626;
-  border-color: #dc2626;
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .btn-outline-green {
-  color: #65a30d;
-  border-color: #65a30d;
+  color: var(--accent-yellow-green);
+  border-color: var(--accent-yellow-green);
 }
 
 .btn-outline-yellow {
-  color: #ca8a04;
-  border-color: #ca8a04;
+  color: var(--warning);
+  border-color: var(--warning);
 }
 
 .btn-outline-blue {
-  color: #2563eb;
-  border-color: #2563eb;
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .btn-icon-only {
@@ -115,8 +203,8 @@ body {
 
 .segment-control {
   display: inline-flex;
-  border: 1px solid #111827;
-  border-radius: 6px;
+  border: 1px solid var(--bord2);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -124,11 +212,15 @@ body {
   font-size: 14px;
   padding: 6px 12px;
   border: none;
-  border-right: 1px solid #111827;
-  background: #fff;
-  color: #111827;
+  border-right: 1px solid var(--bord2);
+  background: var(--surface-unselected);
+  color: var(--text1);
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .segment-btn:last-child {
@@ -136,8 +228,9 @@ body {
 }
 
 .segment-btn.is-active {
-  background: #2563eb;
-  color: #fff;
+  background: var(--surface-selected);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 /* ==== Section: Main Area / Schedule Table ==== */
@@ -1154,7 +1247,7 @@ button:disabled {
   </div>
   <div class="app-header-right">
     <button id="btn-export-excel" class="btn btn-outline-green"><svg class="btn-icon"><use href="#icon-table-cells"></use></svg><span class="btn-label">Excel出力</span></button>
-    <button id="btn-print-pdf" class="btn"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF出力</span></button>
+    <button id="btn-print-pdf" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF出力</span></button>
     <button id="btn-export-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-down-tray"></use></svg><span class="btn-label">JSON出力</span></button>
     <button id="btn-import-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-up-tray"></use></svg><span class="btn-label">データ取込</span></button>
     <input id="import-json-file-input" type="file" accept="application/json" hidden>
