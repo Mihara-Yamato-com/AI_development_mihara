@@ -17,10 +17,18 @@ body {
 .app-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
   background: #1f2937;
   color: #fff;
+}
+
+.app-header-left,
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-header select {
@@ -38,10 +46,18 @@ body {
 .toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 6px 12px;
   background: #f3f4f6;
   border-bottom: 1px solid #d1d5db;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .toolbar select {
@@ -1068,43 +1084,51 @@ button:disabled {
 </svg>
 
 <header class="app-header">
-  <span class="app-title">GantForge</span>
-  <label for="project-select">プロジェクト:</label>
-  <select id="project-select"></select>
-  <button id="btn-new-project" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus-circle"></use></svg><span class="btn-label">新規プロジェクト作成</span></button>
-  <button id="btn-delete-project" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">プロジェクト削除</span></button>
-  <button id="btn-export-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-down-tray"></use></svg><span class="btn-label">JSON出力</span></button>
-  <button id="btn-import-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-up-tray"></use></svg><span class="btn-label">データ取込</span></button>
-  <input id="import-json-file-input" type="file" accept="application/json" hidden>
-  <button id="btn-export-excel" class="btn btn-outline-green"><svg class="btn-icon"><use href="#icon-table-cells"></use></svg><span class="btn-label">Excel出力</span></button>
-  <button id="btn-print-pdf" class="btn"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF出力</span></button>
+  <div class="app-header-left">
+    <span class="app-title">GantForge</span>
+    <label for="project-select">プロジェクト:</label>
+    <select id="project-select"></select>
+    <button id="btn-new-project" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus-circle"></use></svg><span class="btn-label">新規プロジェクト作成</span></button>
+    <button id="btn-delete-project" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">プロジェクト削除</span></button>
+  </div>
+  <div class="app-header-right">
+    <button id="btn-export-excel" class="btn btn-outline-green"><svg class="btn-icon"><use href="#icon-table-cells"></use></svg><span class="btn-label">Excel出力</span></button>
+    <button id="btn-print-pdf" class="btn"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF出力</span></button>
+    <button id="btn-export-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-down-tray"></use></svg><span class="btn-label">JSON出力</span></button>
+    <button id="btn-import-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-up-tray"></use></svg><span class="btn-label">データ取込</span></button>
+    <input id="import-json-file-input" type="file" accept="application/json" hidden>
+  </div>
 </header>
 
 <div class="toolbar">
-  <button id="btn-toggle-lock" class="btn"><svg class="btn-icon"><use href="#icon-lock-open"></use></svg><span class="btn-label">ロック</span></button>
-  <button id="btn-add-schedule" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">スケジュール追加</span></button>
-  <label for="period-select">表示単位:</label>
-  <select id="period-select">
-    <option value="day">日</option>
-    <option value="week">週</option>
-    <option value="month">月</option>
-    <option value="quarter">3ヶ月</option>
-  </select>
-  <button id="btn-today" class="btn"><svg class="btn-icon"><use href="#icon-calendar-days"></use></svg><span class="btn-label">今日</span></button>
-  <button id="btn-expand-all" class="btn"><svg class="btn-icon"><use href="#icon-chevron-double-down"></use></svg><span class="btn-label">全て開く</span></button>
-  <span>表示列:</span>
-  <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
-  <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
-  <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
-  <button id="btn-milestones" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-flag"></use></svg><span class="btn-label">マイルストーン</span></button>
-  <button id="btn-comments" class="btn"><svg class="btn-icon"><use href="#icon-chat-bubble"></use></svg><span class="btn-label">コメント</span></button>
-  <button id="btn-edit-project" class="btn"><svg class="btn-icon"><use href="#icon-pencil-square"></use></svg><span class="btn-label">編集</span></button>
-  <button id="btn-history" class="btn"><svg class="btn-icon"><use href="#icon-clock"></use></svg><span class="btn-label">変更履歴</span></button>
-  <button id="btn-memos" class="btn"><svg class="btn-icon"><use href="#icon-document-text"></use></svg><span class="btn-label">メモ</span></button>
-  <button id="btn-quick-memos" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-bolt"></use></svg><span class="btn-label">即時メモ</span></button>
-  <button id="btn-tasks" class="btn btn-outline-blue"><svg class="btn-icon"><use href="#icon-view-columns"></use></svg><span class="btn-label">タスク管理</span></button>
-  <button id="btn-snapshots" class="btn"><svg class="btn-icon"><use href="#icon-camera"></use></svg><span class="btn-label">スナップショット</span></button>
-  <button id="btn-mindmap" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-share"></use></svg><span class="btn-label">マインドマップ</span></button>
+  <div class="toolbar-left">
+    <button id="btn-toggle-lock" class="btn"><svg class="btn-icon"><use href="#icon-lock-open"></use></svg><span class="btn-label">ロック</span></button>
+    <button id="btn-add-schedule" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">スケジュール追加</span></button>
+    <label for="period-select">表示単位:</label>
+    <select id="period-select">
+      <option value="day">日</option>
+      <option value="week">週</option>
+      <option value="month">月</option>
+      <option value="quarter">3ヶ月</option>
+    </select>
+    <button id="btn-today" class="btn"><svg class="btn-icon"><use href="#icon-calendar-days"></use></svg><span class="btn-label">今日</span></button>
+    <button id="btn-expand-all" class="btn"><svg class="btn-icon"><use href="#icon-chevron-double-down"></use></svg><span class="btn-label">全て開く</span></button>
+    <span>表示列:</span>
+    <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
+    <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
+    <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
+    <button id="btn-milestones" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-flag"></use></svg><span class="btn-label">マイルストーン</span></button>
+    <button id="btn-edit-project" class="btn"><svg class="btn-icon"><use href="#icon-pencil-square"></use></svg><span class="btn-label">編集</span></button>
+  </div>
+  <div class="toolbar-right">
+    <button id="btn-tasks" class="btn btn-outline-blue"><svg class="btn-icon"><use href="#icon-view-columns"></use></svg><span class="btn-label">タスク管理</span></button>
+    <button id="btn-mindmap" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-share"></use></svg><span class="btn-label">マインドマップ</span></button>
+    <button id="btn-history" class="btn"><svg class="btn-icon"><use href="#icon-clock"></use></svg><span class="btn-label">変更履歴</span></button>
+    <button id="btn-comments" class="btn"><svg class="btn-icon"><use href="#icon-chat-bubble"></use></svg><span class="btn-label">コメント</span></button>
+    <button id="btn-memos" class="btn"><svg class="btn-icon"><use href="#icon-document-text"></use></svg><span class="btn-label">メモ</span></button>
+    <button id="btn-quick-memos" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-bolt"></use></svg><span class="btn-label">即時メモ</span></button>
+    <button id="btn-snapshots" class="btn"><svg class="btn-icon"><use href="#icon-camera"></use></svg><span class="btn-label">スナップショット</span></button>
+  </div>
 </div>
 
 <main class="main-area">

@@ -30,7 +30,7 @@ developから切って進め、完了したサブステップごとにdevelopへ
 **進捗状況**:
 - [x] 5-A: 完了(実装日: 2026-07-15, ブランチ: feature/5-design-overhaul, PR #35)
 - [x] 5-B: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-b-button-icons)
-- [ ] 5-C: 未着手
+- [x] 5-C: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-c-header-toolbar-order)
 - [ ] 5-D: 未着手
 - [ ] 5-E: 未着手
 - [ ] 5-F: 未着手
@@ -75,6 +75,13 @@ developから切って進め、完了したサブステップごとにdevelopへ
 - 操作バー右: タスク管理 → マインドマップ → 変更履歴 → コメント → メモ → 即時メモ → スナップショット
   (現在「コメント」は左寄り・「変更履歴」は編集の後ろにあるため移動が必要。IDや`bindEvents`のイベント登録は
   一切変更せず、HTML内のボタンの並び順のみ変更する)
+
+**実装メモ(2026-07-16)**:
+- ヘッダー/操作バーそれぞれに`.app-header-left`/`.app-header-right`、`.toolbar-left`/`.toolbar-right`の
+  ラッパーdivを追加し、親要素は`justify-content: space-between`で左右に分離した
+- ボタンのid・`bindEvents`のイベント登録は変更せず、HTML内の記述順序とラッパーの所属のみ変更した
+  (getElementByIdはDOM上の位置に依存しないため副作用なし)
+- 「コメント」を操作バー右へ、「変更履歴」を「編集」の後ろから操作バー右の並びへ移動した
 
 ### 5-D: 表示単位・表示列のセグメントコントロール化
 - `<select id="period-select">`を廃止し、`.segment-control`内に`[日][週][1か月][3か月]`の4ボタンを配置。
