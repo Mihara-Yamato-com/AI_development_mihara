@@ -77,8 +77,9 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
-  background: #1f2937;
-  color: #fff;
+  background: var(--white);
+  color: var(--text1);
+  border-bottom: 1px solid var(--bord1);
 }
 
 .app-header-left,
@@ -91,6 +92,8 @@ body {
 .app-header select {
   font-size: 14px;
   padding: 4px 8px;
+  border: 1px solid var(--bord2);
+  border-radius: var(--radius-s);
 }
 
 .app-title {
@@ -175,6 +178,11 @@ body {
   background: var(--primary);
   color: var(--white);
   border-color: var(--primary);
+}
+
+.btn-solid-blue:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
 .btn-outline-red {
@@ -500,7 +508,8 @@ body {
   background: var(--white);
   padding: 16px 20px;
   border-radius: var(--radius);
-  width: 360px;
+  width: 520px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -547,11 +556,14 @@ body {
 }
 
 .modal-box input,
-.modal-box textarea {
+.modal-box textarea,
+.modal-box select {
   font-size: 14px;
   padding: 4px 6px;
   box-sizing: border-box;
   width: 100%;
+  border: 1px solid var(--bord2);
+  border-radius: var(--radius-s);
 }
 
 .modal-actions {
@@ -613,7 +625,8 @@ button:disabled {
 }
 
 .modal-box input:disabled,
-.modal-box textarea:disabled {
+.modal-box textarea:disabled,
+.modal-box select:disabled {
   background: #e5e7eb;
   cursor: not-allowed;
 }
@@ -1338,12 +1351,12 @@ button:disabled {
     <label for="project-select">プロジェクト:</label>
     <select id="project-select"></select>
     <button id="btn-new-project" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus-circle"></use></svg><span class="btn-label">新規プロジェクト作成</span></button>
-    <button id="btn-delete-project" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">プロジェクト削除</span></button>
+    <button id="btn-delete-project" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">削除</span></button>
   </div>
   <div class="app-header-right">
-    <button id="btn-export-excel" class="btn btn-outline-green"><svg class="btn-icon"><use href="#icon-table-cells"></use></svg><span class="btn-label">Excel出力</span></button>
-    <button id="btn-print-pdf" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF出力</span></button>
-    <button id="btn-export-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-down-tray"></use></svg><span class="btn-label">JSON出力</span></button>
+    <button id="btn-export-excel" class="btn btn-outline-green"><svg class="btn-icon"><use href="#icon-table-cells"></use></svg><span class="btn-label">Excel</span></button>
+    <button id="btn-print-pdf" class="btn"><svg class="btn-icon"><use href="#icon-document-arrow-down"></use></svg><span class="btn-label">PDF</span></button>
+    <button id="btn-export-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-down-tray"></use></svg><span class="btn-label">データ出力</span></button>
     <button id="btn-import-json" class="btn"><svg class="btn-icon"><use href="#icon-arrow-up-tray"></use></svg><span class="btn-label">データ取込</span></button>
     <input id="import-json-file-input" type="file" accept="application/json" hidden>
   </div>
@@ -1353,7 +1366,6 @@ button:disabled {
   <div class="toolbar-left">
     <button id="btn-toggle-lock" class="btn"><svg class="btn-icon"><use href="#icon-lock-open"></use></svg><span class="btn-label">ロック</span></button>
     <button id="btn-add-schedule" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">スケジュール追加</span></button>
-    <span>表示単位:</span>
     <div id="period-segment" class="segment-control">
       <button type="button" class="segment-btn is-active" data-period="day">日</button>
       <button type="button" class="segment-btn" data-period="week">週</button>
@@ -1362,7 +1374,6 @@ button:disabled {
     </div>
     <button id="btn-today" class="btn"><svg class="btn-icon"><use href="#icon-calendar-days"></use></svg><span class="btn-label">今日</span></button>
     <button id="btn-expand-all" class="btn"><svg class="btn-icon"><use href="#icon-chevron-double-down"></use></svg><span class="btn-label">全て開く</span></button>
-    <span>表示列:</span>
     <div id="column-segment" class="segment-control">
       <button type="button" class="segment-btn is-active" data-column="startDate">開始</button>
       <button type="button" class="segment-btn is-active" data-column="endDate">終了</button>
@@ -3216,6 +3227,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
    */
   function openOverlay(id) {
     const container = document.getElementById(id);
+
+    if (container.classList.contains("side-panel")) {
+      const panelClosers = {
+        "history-panel": closeHistoryPanel,
+        "memo-panel": closeMemoPanel,
+        "quick-memo-panel": closeQuickMemoPanel,
+        "task-panel": closeTaskPanel,
+        "comment-panel": closeCommentPanel,
+        "snapshot-panel": closeSnapshotPanel,
+        "mindmap-panel": closeMindMapPanel,
+      };
+      Object.keys(panelClosers).forEach((panelId) => {
+        if (panelId !== id && !document.getElementById(panelId).hidden) {
+          panelClosers[panelId]();
+        }
+      });
+    }
+
     container.hidden = false;
     const focusable = container.querySelector("input:not([disabled]), textarea:not([disabled]), select:not([disabled])");
     if (focusable) {
