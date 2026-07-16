@@ -234,13 +234,28 @@ body {
 }
 
 /* ==== Section: Main Area / Schedule Table ==== */
+.lock-status-label {
+  background: var(--danger);
+  color: var(--white);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
 .main-area {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--schedule-table-width) minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .schedule-table {
-  flex: 1;
+  width: var(--schedule-table-width);
+  min-width: var(--schedule-table-width);
+  max-width: var(--schedule-table-width);
+  box-sizing: border-box;
   padding: 12px;
+  overflow: auto;
+  border-right: 1px solid var(--bord1);
 }
 
 .schedule-table table {
@@ -297,7 +312,8 @@ body {
 }
 
 .gantt-chart {
-  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 12px;
   color: #6b7280;
   font-size: 13px;
@@ -1109,6 +1125,7 @@ button:disabled {
 @media print {
   .app-header,
   .toolbar,
+  .lock-status-label,
   .side-panel,
   .modal-overlay,
   .mindmap-context-menu {
@@ -1126,6 +1143,8 @@ button:disabled {
   .schedule-table,
   .gantt-chart {
     width: 100%;
+    min-width: 0;
+    max-width: none;
     overflow: visible;
   }
 
@@ -1344,6 +1363,8 @@ button:disabled {
     <button id="btn-snapshots" class="btn"><svg class="btn-icon"><use href="#icon-camera"></use></svg><span class="btn-label">スナップショット</span></button>
   </div>
 </div>
+
+<div id="lock-status-label" class="lock-status-label" hidden>🔒 ロック中ー編集操作は無効です</div>
 
 <main class="main-area">
   <section id="schedule-table-container" class="schedule-table"></section>
@@ -3251,6 +3272,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     lockButton.querySelector("use").setAttribute("href", currentProjectLocked ? "#icon-lock-closed" : "#icon-lock-open");
     lockButton.disabled = currentProjectId === null;
     lockButton.classList.toggle("is-locked", currentProjectLocked);
+    document.getElementById("lock-status-label").hidden = !currentProjectLocked;
 
     ["btn-add-schedule", "btn-edit-project", "btn-delete-project", "btn-add-milestone", "milestone-date", "milestone-label", "btn-new-memo", "quick-memo-input", "btn-add-quick-memo", "btn-add-task", "task-add-title"].forEach((id) => {
       document.getElementById(id).disabled = currentProjectLocked;
