@@ -32,7 +32,7 @@ developから切って進め、完了したサブステップごとにdevelopへ
 - [x] 5-B: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-b-button-icons)
 - [x] 5-C: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-c-header-toolbar-order)
 - [x] 5-D: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-d-segment-controls)
-- [ ] 5-E: 未着手
+- [x] 5-E: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-e-gantt-header)
 - [ ] 5-F: 未着手
 - [ ] 5-G: 未着手
 
@@ -110,6 +110,20 @@ developから切って進め、完了したサブステップごとにdevelopへ
     暦年の四半期: Q1=1-3月, Q2=4-6月, Q3=7-9月, Q4=10-12月)
   - `headerHeightPx`を2段分に拡張し、行位置計算・SVG系オーバーレイ(グリッド線/今日線/マイルストーン線)の
     高さ計算に影響しないよう調整する
+
+**実装メモ(2026-07-16)**:
+- ヘッダーを`.gantt-header-top`(バンド)/`.gantt-header-bottom`(既存の日別セル)の2段に分割し、
+  `.gantt-header`は`flex-direction: column`に変更。`headerHeightPx`を20→40に拡張した
+- 新規関数`buildGanttHeaderBands(rangeStart, totalDays, dayWidthPx)`で、日を1つずつ辿りながら
+  currentPeriodに応じたグループキー(day/week→年-月、month→年-四半期、quarter→年)が変わる位置を検出し、
+  連続する同一グループの幅を積算してバンド配列を作る
+- 下段ラベルは`formatHeaderBottomLabel`で分岐: day/week→既存`formatDateLabel`、month→新規`formatMonthLabel`(M月)、
+  quarter→新規`formatQuarterLabel`(Qn(x-y月))。`shouldShowDateLabel`もmonth(月初)/quarter(四半期初:1/4/7/10月の1日)を
+  区別するよう分岐を追加した
+- 検証はIndexedDBへの実データ投入によるスクリーンショットではなく、`buildGanttHeaderBands`等の対象関数を
+  index.htmlから正規表現でそのまま抽出し、日/週/1か月/3か月それぞれ異なる日付レンジで実行して描画結果を
+  スクリーンショット確認する方法で行った(バンドの区切り位置と月/四半期/年の境界が一致することを確認済み)。
+  IndexedDBに実データを入れてブラウザで見た目を確認する手順は、ユーザーによる手動確認をお願いする
 
 ### 5-F: ガントバーの表示形式(親はバー内・子はバー上)と実営業日
 - 新規共有ヘルパー`isBusinessDay(date)`(土日+`getHolidayName`を使った祝日判定を1箇所に集約)と
