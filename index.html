@@ -102,6 +102,22 @@ body {
   margin-right: 4px;
 }
 
+.app-header-divider {
+  color: var(--text-muted);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ==== Section: Toolbar ==== */
 .toolbar {
   display: flex;
@@ -273,7 +289,8 @@ body {
 
 .schedule-table th,
 .schedule-table td {
-  border: 1px solid #d1d5db;
+  border: none;
+  border-bottom: 1px solid var(--bord1);
   padding: 0 8px;
   font-size: 13px;
   text-align: left;
@@ -1348,7 +1365,8 @@ button:disabled {
 <header class="app-header">
   <div class="app-header-left">
     <span class="app-title">GantForge</span>
-    <label for="project-select">プロジェクト:</label>
+    <span class="app-header-divider" aria-hidden="true">｜</span>
+    <label for="project-select" class="sr-only">プロジェクト</label>
     <select id="project-select"></select>
     <button id="btn-new-project" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus-circle"></use></svg><span class="btn-label">新規プロジェクト作成</span></button>
     <button id="btn-delete-project" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">削除</span></button>
