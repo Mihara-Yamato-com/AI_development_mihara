@@ -60,11 +60,6 @@ body {
   gap: 8px;
 }
 
-.toolbar select {
-  font-size: 14px;
-  padding: 4px 8px;
-}
-
 /* ==== Section: Common Button / Icon Design System (docs/rules準拠) ==== */
 .btn {
   display: inline-flex;
@@ -116,6 +111,33 @@ body {
 
 .btn-icon-only {
   padding: 4px;
+}
+
+.segment-control {
+  display: inline-flex;
+  border: 1px solid #111827;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segment-btn {
+  font-size: 14px;
+  padding: 6px 12px;
+  border: none;
+  border-right: 1px solid #111827;
+  background: #fff;
+  color: #111827;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segment-btn:last-child {
+  border-right: none;
+}
+
+.segment-btn.is-active {
+  background: #2563eb;
+  color: #fff;
 }
 
 /* ==== Section: Main Area / Schedule Table ==== */
@@ -1104,19 +1126,21 @@ button:disabled {
   <div class="toolbar-left">
     <button id="btn-toggle-lock" class="btn"><svg class="btn-icon"><use href="#icon-lock-open"></use></svg><span class="btn-label">ロック</span></button>
     <button id="btn-add-schedule" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">スケジュール追加</span></button>
-    <label for="period-select">表示単位:</label>
-    <select id="period-select">
-      <option value="day">日</option>
-      <option value="week">週</option>
-      <option value="month">月</option>
-      <option value="quarter">3ヶ月</option>
-    </select>
+    <span>表示単位:</span>
+    <div id="period-segment" class="segment-control">
+      <button type="button" class="segment-btn is-active" data-period="day">日</button>
+      <button type="button" class="segment-btn" data-period="week">週</button>
+      <button type="button" class="segment-btn" data-period="month">1か月</button>
+      <button type="button" class="segment-btn" data-period="quarter">3か月</button>
+    </div>
     <button id="btn-today" class="btn"><svg class="btn-icon"><use href="#icon-calendar-days"></use></svg><span class="btn-label">今日</span></button>
     <button id="btn-expand-all" class="btn"><svg class="btn-icon"><use href="#icon-chevron-double-down"></use></svg><span class="btn-label">全て開く</span></button>
     <span>表示列:</span>
-    <label><input type="checkbox" id="col-toggle-start" checked>開始</label>
-    <label><input type="checkbox" id="col-toggle-end" checked>終了</label>
-    <label><input type="checkbox" id="col-toggle-status" checked>状態</label>
+    <div id="column-segment" class="segment-control">
+      <button type="button" class="segment-btn is-active" data-column="startDate">開始</button>
+      <button type="button" class="segment-btn is-active" data-column="endDate">終了</button>
+      <button type="button" class="segment-btn is-active" data-column="status">状態</button>
+    </div>
     <button id="btn-milestones" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-flag"></use></svg><span class="btn-label">マイルストーン</span></button>
     <button id="btn-edit-project" class="btn"><svg class="btn-icon"><use href="#icon-pencil-square"></use></svg><span class="btn-label">編集</span></button>
   </div>
@@ -5176,23 +5200,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     });
 
-    document.getElementById("period-select").addEventListener("change", async (event) => {
-      currentPeriod = event.target.value;
+    document.getElementById("period-segment").addEventListener("click", async (event) => {
+      const button = event.target.closest(".segment-btn");
+      if (!button) return;
+      currentPeriod = button.dataset.period;
+      document.querySelectorAll("#period-segment .segment-btn").forEach((btn) => {
+        btn.classList.toggle("is-active", btn === button);
+      });
       await renderGanttChart();
     });
 
-    document.getElementById("col-toggle-start").addEventListener("change", async (event) => {
-      visibleColumns.startDate = event.target.checked;
-      await renderScheduleTable();
-    });
-
-    document.getElementById("col-toggle-end").addEventListener("change", async (event) => {
-      visibleColumns.endDate = event.target.checked;
-      await renderScheduleTable();
-    });
-
-    document.getElementById("col-toggle-status").addEventListener("change", async (event) => {
-      visibleColumns.status = event.target.checked;
+    document.getElementById("column-segment").addEventListener("click", async (event) => {
+      const button = event.target.closest(".segment-btn");
+      if (!button) return;
+      const isActive = button.classList.toggle("is-active");
+      visibleColumns[button.dataset.column] = isActive;
       await renderScheduleTable();
     });
 

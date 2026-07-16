@@ -31,7 +31,7 @@ developから切って進め、完了したサブステップごとにdevelopへ
 - [x] 5-A: 完了(実装日: 2026-07-15, ブランチ: feature/5-design-overhaul, PR #35)
 - [x] 5-B: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-b-button-icons)
 - [x] 5-C: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-c-header-toolbar-order)
-- [ ] 5-D: 未着手
+- [x] 5-D: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-d-segment-controls)
 - [ ] 5-E: 未着手
 - [ ] 5-F: 未着手
 - [ ] 5-G: 未着手
@@ -89,6 +89,17 @@ developから切って進め、完了したサブステップごとにdevelopへ
   (`period-select`の`change`ハンドラの中身をそのままクリックハンドラに移植)
 - 表示列の3チェックボックス(開始/終了/状態)を同様に`.segment-control`のトグルボタン化。
   表示中=青、非表示=デフォルトのスタイルとし、`visibleColumns`の更新と`renderScheduleTable()`呼び出しはそのまま流用
+
+**実装メモ(2026-07-16)**:
+- `.segment-control`/`.segment-btn`/`.segment-btn.is-active`をCSSに追加(角丸枠+内部区切り線、選択中のみ青)
+- `period-select`を`#period-segment`(`data-period`属性付きボタン4つ)に、開始/終了/状態のチェックボックスを
+  `#column-segment`(`data-column`属性付きボタン3つ)に置き換え。イベントはクリック委譲で1つのlistenerに統合し、
+  `currentPeriod`の切り替え・`visibleColumns`の更新・`renderGanttChart()`/`renderScheduleTable()`呼び出しは
+  既存のロジックをそのまま流用した
+- 表示単位のラベルは04_design_system.mdの表記に合わせ「1か月」「3か月」とした(旧`<select>`は「月」「3ヶ月」表記だった)
+- docs/rules 01は「全ボタンにHeroicons付与」だが、04のセグメントコントロールのモックアップはテキストのみのため、
+  この2種のセグメントボタンはアイコンなし(色による選択状態表現)とした
+- 不要になった`.toolbar select`のCSSルールを削除(toolbar内に`<select>`が無くなったため)
 
 ### 5-E: ガントチャートヘッダーの2段化とラベル書式
 - `renderGanttChart`(`index.html:4188-4300`)を改修し、ヘッダーを2段構成にする
