@@ -1731,6 +1731,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     await renderMainArea();
     renderExpandAllButton();
     bindEvents();
+    updateResponsiveToolbarVisibility();
   }
 
   /**
@@ -3220,6 +3221,50 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !panel.hidden) closeFn();
     });
+  }
+
+  /**
+   * 画面幅が不足した際に非表示にする、表示単位・表示列の優先順位(先頭から隠す)
+   * 「日」「開始」は含めず常に表示を維持する
+   */
+  const RESPONSIVE_HIDE_ORDER = [
+    { group: "period", value: "quarter" },
+    { group: "column", value: "status" },
+    { group: "period", value: "month" },
+    { group: "column", value: "endDate" },
+    { group: "period", value: "week" },
+  ];
+
+  /**
+   * 優先順位のエントリに対応するセグメントボタン要素を返す
+   * @param {{group: "period"|"column", value: string}} entry
+   * @returns {HTMLElement|null}
+   */
+  function getResponsiveHideTarget(entry) {
+    if (entry.group === "period") {
+      return document.querySelector('#period-segment [data-period="' + entry.value + '"]');
+    }
+    return document.querySelector('#column-segment [data-column="' + entry.value + '"]');
+  }
+
+  /**
+   * 操作バーの幅が画面幅に収まりきらない場合、表示単位・表示列を優先順位の低い項目から
+   * 順に非表示にする(収まる場合は全て再表示する)
+   */
+  function updateResponsiveToolbarVisibility() {
+    const toolbar = document.querySelector(".toolbar");
+    if (!toolbar) return;
+
+    RESPONSIVE_HIDE_ORDER.forEach((entry) => {
+      const target = getResponsiveHideTarget(entry);
+      if (target) target.hidden = false;
+    });
+
+    for (let i = 0; i < RESPONSIVE_HIDE_ORDER.length; i++) {
+      if (toolbar.scrollWidth <= toolbar.clientWidth) break;
+      const target = getResponsiveHideTarget(RESPONSIVE_HIDE_ORDER[i]);
+      if (target) target.hidden = true;
+    }
   }
 
   /* ---- Sub-section: Projects ---- */
@@ -4981,6 +5026,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   /* ==== Section: イベントハンドラ ==== */
 
   function bindEvents() {
+    let responsiveResizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(responsiveResizeTimer);
+      responsiveResizeTimer = setTimeout(updateResponsiveToolbarVisibility, 150);
+    });
+
     bindModalDismissal("project-edit-modal", closeProjectEditModal);
     bindModalDismissal("schedule-add-modal", closeScheduleAddModal);
     bindModalDismissal("milestone-modal", closeMilestoneModal);
