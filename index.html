@@ -1501,6 +1501,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     quarter: 3,
   };
 
+  const SCHEDULE_PARENT_ROW_COLORS = ["#eff6ff", "#dbeafe", "#e0e7ff", "#ecfeff", "#f0f9ff"];
+
   let db = null;
   let currentProjectId = null;
   let currentPeriod = "day";
@@ -3065,7 +3067,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
    * @param {Array<Object>} items
    * @param {Object} [options]
    * @param {boolean} [options.ignoreCollapsed] - trueの場合、折りたたみ状態を無視して全展開する
-   * @returns {Array<{item: Object, depth: number, hasChildren: boolean}>}
+   * @returns {Array<{item: Object, depth: number, hasChildren: boolean, groupIndex: number}>}
    */
   function buildVisibleScheduleList(items, options) {
     const ignoreCollapsed = Boolean(options && options.ignoreCollapsed);
@@ -3081,18 +3083,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     const result = [];
 
-    function visit(parentId, depth) {
+    function visit(parentId, depth, groupIndex) {
       const children = childrenByParentId.get(parentId) || [];
-      children.forEach((item) => {
+      children.forEach((item, index) => {
         const hasChildren = (childrenByParentId.get(item.id) || []).length > 0;
-        result.push({ item: item, depth: depth, hasChildren: hasChildren });
+        const itemGroupIndex = depth === 0 ? index : groupIndex;
+        result.push({ item: item, depth: depth, hasChildren: hasChildren, groupIndex: itemGroupIndex });
         if (ignoreCollapsed || !item.collapsed) {
-          visit(item.id, depth + 1);
+          visit(item.id, depth + 1, itemGroupIndex);
         }
       });
     }
 
-    visit(null, 0);
+    visit(null, 0, 0);
     return result;
   }
 
@@ -4235,8 +4238,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const statusCell = visibleColumns.status
           ? "<td><select class=\"status-select\" data-item-id=\"" + item.id + "\"" + disabledAttr + ">" + statusOptionsHtml(item) + "</select></td>"
           : "";
+        const rowStyleAttr = entry.hasChildren
+          ? " style=\"background:" + SCHEDULE_PARENT_ROW_COLORS[entry.groupIndex % SCHEDULE_PARENT_ROW_COLORS.length] + "\""
+          : "";
         return (
-          "<tr class=\"schedule-row\" data-item-id=\"" + item.id + "\">" +
+          "<tr class=\"schedule-row\" data-item-id=\"" + item.id + "\"" + rowStyleAttr + ">" +
           "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
           startCell + endCell + statusCell +
           "<td class=\"row-actions\">" +
