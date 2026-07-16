@@ -98,6 +98,10 @@ body {
   border-color: #2563eb;
 }
 
+.btn-icon-only {
+  padding: 4px;
+}
+
 /* ==== Section: Main Area / Schedule Table ==== */
 .main-area {
   display: flex;
@@ -663,12 +667,6 @@ button:disabled {
 }
 
 /* ==== Section: Snapshot Panel ==== */
-.btn-close-x {
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 8px;
-}
-
 .snapshot-panel {
   width: 700px;
 }
@@ -839,6 +837,9 @@ button:disabled {
 }
 
 .mindmap-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   text-align: left;
   font-size: 13px;
   padding: 6px 10px;
@@ -1025,6 +1026,45 @@ button:disabled {
     <path d="M8.3 10.8l7.4-3.6" />
     <path d="M8.3 13.2l7.4 3.6" />
   </symbol>
+  <symbol id="icon-x-mark" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 6l12 12" />
+    <path d="M18 6l-12 12" />
+  </symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 13l4 4L19 7" />
+  </symbol>
+  <symbol id="icon-chevron-up" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 15l6-6 6 6" />
+  </symbol>
+  <symbol id="icon-chevron-down" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 9l6 6 6-6" />
+  </symbol>
+  <symbol id="icon-arrows-right-left" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h13" />
+    <path d="M13 3l4 4-4 4" />
+    <path d="M20 17H7" />
+    <path d="M11 21l-4-4 4-4" />
+  </symbol>
+  <symbol id="icon-arrow-path" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12a8 8 0 0114-5.3" />
+    <path d="M18 3v5h-5" />
+    <path d="M20 12a8 8 0 01-14 5.3" />
+    <path d="M6 21v-5h5" />
+  </symbol>
+  <symbol id="icon-arrows-pointing-out" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 4H4v5" />
+    <path d="M4 4l6 6" />
+    <path d="M15 4h5v5" />
+    <path d="M20 4l-6 6" />
+    <path d="M9 20H4v-5" />
+    <path d="M4 20l6-6" />
+    <path d="M15 20h5v-5" />
+    <path d="M20 20l-6-6" />
+  </symbol>
+  <symbol id="icon-paper-airplane" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20l16-8L4 4l3 8-3 8z" />
+    <path d="M7 12h13" />
+  </symbol>
 </svg>
 
 <header class="app-header">
@@ -1080,8 +1120,8 @@ button:disabled {
     <label for="edit-project-description">説明</label>
     <textarea id="edit-project-description" rows="4"></textarea>
     <div class="modal-actions">
-      <button id="btn-cancel-edit-project">キャンセル</button>
-      <button id="btn-save-edit-project">保存</button>
+      <button id="btn-cancel-edit-project" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">キャンセル</span></button>
+      <button id="btn-save-edit-project" class="btn"><svg class="btn-icon"><use href="#icon-check"></use></svg><span class="btn-label">保存</span></button>
     </div>
   </div>
 </div>
@@ -1098,8 +1138,8 @@ button:disabled {
     <label for="schedule-add-parent">親項目</label>
     <select id="schedule-add-parent"></select>
     <div class="modal-actions">
-      <button id="btn-cancel-add-schedule">キャンセル</button>
-      <button id="btn-confirm-add-schedule">追加</button>
+      <button id="btn-cancel-add-schedule" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">キャンセル</span></button>
+      <button id="btn-confirm-add-schedule" class="btn btn-solid-blue"><svg class="btn-icon"><use href="#icon-check"></use></svg><span class="btn-label">追加</span></button>
     </div>
   </div>
 </div>
@@ -1113,8 +1153,8 @@ button:disabled {
     <label for="milestone-label">ラベル</label>
     <input id="milestone-label" type="text">
     <div class="modal-actions">
-      <button id="btn-close-milestone-modal">閉じる</button>
-      <button id="btn-add-milestone">追加</button>
+      <button id="btn-close-milestone-modal" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">閉じる</span></button>
+      <button id="btn-add-milestone" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">追加</span></button>
     </div>
   </div>
 </div>
@@ -1129,15 +1169,15 @@ button:disabled {
     <label for="schedule-edit-end-date">終了日</label>
     <input id="schedule-edit-end-date" type="date">
     <div class="modal-actions">
-      <button id="btn-cancel-edit-schedule">キャンセル</button>
-      <button id="btn-save-edit-schedule">保存</button>
+      <button id="btn-cancel-edit-schedule" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">キャンセル</span></button>
+      <button id="btn-save-edit-schedule" class="btn"><svg class="btn-icon"><use href="#icon-check"></use></svg><span class="btn-label">保存</span></button>
     </div>
     <hr>
     <h3>コメント</h3>
     <div id="schedule-comment-list" class="comment-list"></div>
     <textarea id="schedule-comment-input" rows="2" placeholder="コメントを入力"></textarea>
     <div class="modal-actions">
-      <button id="btn-send-comment">送信</button>
+      <button id="btn-send-comment" class="btn"><svg class="btn-icon"><use href="#icon-paper-airplane"></use></svg><span class="btn-label">送信</span></button>
     </div>
   </div>
 </div>
@@ -1145,7 +1185,7 @@ button:disabled {
 <aside id="history-panel" class="side-panel" hidden>
   <div class="side-panel-header">
     <h2>変更履歴</h2>
-    <button id="btn-close-history-panel">閉じる</button>
+    <button id="btn-close-history-panel" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">閉じる</span></button>
   </div>
   <div id="history-list" class="side-panel-body"></div>
 </aside>
@@ -1155,12 +1195,12 @@ button:disabled {
     <h2>メモ</h2>
     <div class="side-panel-header-right">
       <span id="memo-count">0件</span>
-      <button id="btn-close-memo-panel">閉じる</button>
+      <button id="btn-close-memo-panel" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">閉じる</span></button>
     </div>
   </div>
   <div class="memo-panel-body">
     <div class="memo-list-column">
-      <button id="btn-new-memo">新規メモ</button>
+      <button id="btn-new-memo" class="btn"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">新規メモ</span></button>
       <div id="memo-list"></div>
     </div>
     <div class="memo-editor-column">
@@ -1181,11 +1221,11 @@ button:disabled {
 <aside id="quick-memo-panel" class="side-panel" hidden>
   <div class="side-panel-header">
     <h2>即時メモ</h2>
-    <button id="btn-close-quick-memo-panel">閉じる</button>
+    <button id="btn-close-quick-memo-panel" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">閉じる</span></button>
   </div>
   <textarea id="quick-memo-input" rows="3" placeholder="メモを入力(Markdown記法可、表示はそのまま)"></textarea>
   <div class="modal-actions">
-    <button id="btn-add-quick-memo">追加</button>
+    <button id="btn-add-quick-memo" class="btn btn-outline-yellow"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">追加</span></button>
   </div>
   <div id="quick-memo-list" class="side-panel-body"></div>
 </aside>
@@ -1193,11 +1233,11 @@ button:disabled {
 <aside id="task-panel" class="side-panel task-panel" hidden>
   <div class="side-panel-header">
     <h2>タスク管理</h2>
-    <button id="btn-close-task-panel">閉じる</button>
+    <button id="btn-close-task-panel" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">閉じる</span></button>
   </div>
   <div class="task-add-row">
     <input id="task-add-title" type="text" placeholder="新しいタスク">
-    <button id="btn-add-task">追加</button>
+    <button id="btn-add-task" class="btn btn-outline-blue"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span class="btn-label">追加</span></button>
   </div>
   <div id="task-board" class="side-panel-body task-board"></div>
 </aside>
@@ -1210,9 +1250,9 @@ button:disabled {
     <label for="task-edit-status">状態</label>
     <select id="task-edit-status"></select>
     <div class="modal-actions">
-      <button id="btn-delete-task">削除</button>
-      <button id="btn-cancel-edit-task">キャンセル</button>
-      <button id="btn-save-edit-task">保存</button>
+      <button id="btn-delete-task" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">削除</span></button>
+      <button id="btn-cancel-edit-task" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">キャンセル</span></button>
+      <button id="btn-save-edit-task" class="btn"><svg class="btn-icon"><use href="#icon-check"></use></svg><span class="btn-label">保存</span></button>
     </div>
   </div>
 </div>
@@ -1220,7 +1260,7 @@ button:disabled {
 <aside id="comment-panel" class="side-panel" hidden>
   <div class="side-panel-header">
     <h2>コメント</h2>
-    <button id="btn-close-comment-panel">閉じる</button>
+    <button id="btn-close-comment-panel" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">閉じる</span></button>
   </div>
   <div id="comment-panel-list" class="side-panel-body"></div>
 </aside>
@@ -1230,8 +1270,8 @@ button:disabled {
     <h2>スナップショット</h2>
     <div class="side-panel-header-right">
       <span id="snapshot-count-header">0件</span>
-      <button id="btn-save-snapshot">保存</button>
-      <button id="btn-close-snapshot-panel" class="btn-close-x">×</button>
+      <button id="btn-save-snapshot" class="btn"><svg class="btn-icon"><use href="#icon-check"></use></svg><span class="btn-label">保存</span></button>
+      <button id="btn-close-snapshot-panel" class="btn btn-icon-only"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg></button>
     </div>
   </div>
   <div id="snapshot-list" class="side-panel-body"></div>
@@ -1242,8 +1282,8 @@ button:disabled {
   <div class="side-panel-header">
     <h2>マインドマップ</h2>
     <div class="side-panel-header-right">
-      <button id="btn-mindmap-fit">全体表示</button>
-      <button id="btn-close-mindmap-panel" class="btn-close-x">×</button>
+      <button id="btn-mindmap-fit" class="btn"><svg class="btn-icon"><use href="#icon-arrows-pointing-out"></use></svg><span class="btn-label">全体表示</span></button>
+      <button id="btn-close-mindmap-panel" class="btn btn-icon-only"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg></button>
     </div>
   </div>
   <div id="mindmap-canvas-wrapper" class="mindmap-canvas-wrapper" tabindex="0">
@@ -1255,8 +1295,8 @@ button:disabled {
 </aside>
 
 <div id="mindmap-context-menu" class="mindmap-context-menu" hidden>
-  <button id="mindmap-menu-rename">名前の変更</button>
-  <button id="mindmap-menu-add-child">子ノードの追加</button>
+  <button id="mindmap-menu-rename"><svg class="btn-icon"><use href="#icon-pencil-square"></use></svg><span>名前の変更</span></button>
+  <button id="mindmap-menu-add-child"><svg class="btn-icon"><use href="#icon-plus"></use></svg><span>子ノードの追加</span></button>
   <div class="mindmap-menu-colors">
     <span>色:</span>
     <div id="mindmap-menu-color-swatches" class="mindmap-color-swatches"></div>
@@ -3054,7 +3094,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return (
           "<div class=\"milestone-list-item\">" +
           "<span>" + escapeHtml(milestone.date) + " " + escapeHtml(milestone.label) + "</span>" +
-          "<button data-delete-milestone-id=\"" + milestone.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
+          "<button class=\"btn btn-outline-red\" data-delete-milestone-id=\"" + milestone.id + "\"" + (currentProjectLocked ? " disabled" : "") + "><svg class=\"btn-icon\"><use href=\"#icon-trash\"></use></svg><span class=\"btn-label\">削除</span></button>" +
           "</div>"
         );
       })
@@ -3155,7 +3195,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return (
           "<div class=\"memo-list-item" + selectedClass + "\" data-memo-id=\"" + memo.id + "\">" +
           "<span class=\"memo-list-item-title\">" + escapeHtml(title) + "</span>" +
-          "<button class=\"btn-delete-memo\" data-memo-id=\"" + memo.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
+          "<button class=\"btn btn-outline-red btn-icon-only btn-delete-memo\" data-memo-id=\"" + memo.id + "\"" + (currentProjectLocked ? " disabled" : "") + " title=\"削除\"><svg class=\"btn-icon\"><use href=\"#icon-trash\"></use></svg></button>" +
           "</div>"
         );
       })
@@ -3266,7 +3306,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           "<span class=\"quick-memo-timestamp\">" + escapeHtml(formatTimestamp(quickMemo.timestamp)) + "</span>" +
           "<pre>" + escapeHtml(quickMemo.text) + "</pre>" +
           "</div>" +
-          "<button class=\"btn-delete-quick-memo\" data-quick-memo-id=\"" + quickMemo.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">削除</button>" +
+          "<button class=\"btn btn-outline-red btn-icon-only btn-delete-quick-memo\" data-quick-memo-id=\"" + quickMemo.id + "\"" + (currentProjectLocked ? " disabled" : "") + " title=\"削除\"><svg class=\"btn-icon\"><use href=\"#icon-trash\"></use></svg></button>" +
           "</div>"
         );
       })
@@ -3312,7 +3352,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             return (
               "<div class=\"kanban-card\" draggable=\"" + (currentProjectLocked ? "false" : "true") + "\" data-task-id=\"" + task.id + "\">" +
               "<span>" + escapeHtml(task.title) + "</span>" +
-              "<button class=\"btn-task-edit\" data-task-id=\"" + task.id + "\"" + (currentProjectLocked ? " disabled" : "") + ">編集</button>" +
+              "<button class=\"btn btn-icon-only btn-task-edit\" data-task-id=\"" + task.id + "\"" + (currentProjectLocked ? " disabled" : "") + " title=\"編集\"><svg class=\"btn-icon\"><use href=\"#icon-pencil-square\"></use></svg></button>" +
               "</div>"
             );
           })
@@ -3405,9 +3445,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           "<div class=\"snapshot-item-meta\">" + escapeHtml(formatTimestamp(snapshot.createdAt)) + " ・ 作業" + items.length + "件 ・ " + escapeHtml(rangeText) + "</div>" +
           "</div>" +
           "<div class=\"snapshot-item-actions\">" +
-          "<button class=\"btn-snapshot-compare\" title=\"現在と比較\">«</button>" +
-          "<button class=\"btn-snapshot-restore\" title=\"この状態に復元\">⇔</button>" +
-          "<button class=\"btn-snapshot-delete\" title=\"削除\">🗑️</button>" +
+          "<button class=\"btn btn-icon-only btn-snapshot-compare\" title=\"現在と比較\"><svg class=\"btn-icon\"><use href=\"#icon-arrows-right-left\"></use></svg></button>" +
+          "<button class=\"btn btn-icon-only btn-snapshot-restore\" title=\"この状態に復元\"><svg class=\"btn-icon\"><use href=\"#icon-arrow-path\"></use></svg></button>" +
+          "<button class=\"btn btn-outline-red btn-icon-only btn-snapshot-delete\" title=\"削除\"><svg class=\"btn-icon\"><use href=\"#icon-trash\"></use></svg></button>" +
           "</div>" +
           "</div>" +
           "<div class=\"snapshot-diff\" hidden></div>" +
@@ -4113,10 +4153,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
           startCell + endCell + statusCell +
           "<td class=\"row-actions\">" +
-          "<button class=\"btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\">編集</button>" +
-          "<button class=\"btn-row-delete\" data-item-id=\"" + item.id + "\" title=\"削除\"" + disabledAttr + ">削除</button>" +
-          "<button class=\"btn-row-move-up\" data-item-id=\"" + item.id + "\" title=\"上へ\"" + (isFirst || currentProjectLocked ? " disabled" : "") + ">▲</button>" +
-          "<button class=\"btn-row-move-down\" data-item-id=\"" + item.id + "\" title=\"下へ\"" + (isLast || currentProjectLocked ? " disabled" : "") + ">▼</button>" +
+          "<button class=\"btn btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\"><svg class=\"btn-icon\"><use href=\"#icon-pencil-square\"></use></svg></button>" +
+          "<button class=\"btn btn-outline-red btn-row-delete\" data-item-id=\"" + item.id + "\" title=\"削除\"" + disabledAttr + "><svg class=\"btn-icon\"><use href=\"#icon-trash\"></use></svg></button>" +
+          "<button class=\"btn btn-row-move-up\" data-item-id=\"" + item.id + "\" title=\"上へ\"" + (isFirst || currentProjectLocked ? " disabled" : "") + "><svg class=\"btn-icon\"><use href=\"#icon-chevron-up\"></use></svg></button>" +
+          "<button class=\"btn btn-row-move-down\" data-item-id=\"" + item.id + "\" title=\"下へ\"" + (isLast || currentProjectLocked ? " disabled" : "") + "><svg class=\"btn-icon\"><use href=\"#icon-chevron-down\"></use></svg></button>" +
           "</td>" +
           "</tr>"
         );
