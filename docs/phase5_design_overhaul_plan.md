@@ -33,7 +33,7 @@ developから切って進め、完了したサブステップごとにdevelopへ
 - [x] 5-C: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-c-header-toolbar-order)
 - [x] 5-D: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-d-segment-controls)
 - [x] 5-E: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-e-gantt-header)
-- [ ] 5-F: 未着手
+- [x] 5-F: 実装完了(実装日: 2026-07-16, ブランチ: feature/5-f-gantt-bar-format)
 - [ ] 5-G: 未着手
 
 次回セッション開始時は、このplanファイルを読み直し、内容をユーザーに再提示してから実装を再開すること。
@@ -132,6 +132,20 @@ developから切って進め、完了したサブステップごとにdevelopへ
 - 親項目(`entry.hasChildren`)はラベルをバー内(現状通り`.gantt-bar`内)に表示。
   子項目(leaf)はラベルをバー上(バーの上に浮かせた別要素、例:バーの少し上に配置する`.gantt-bar-label`)に表示
 - 描画後にDOM計測(`scrollWidth > clientWidth`)で文字が収まらない場合はラベルを非表示にする
+
+**実装メモ(2026-07-16)**:
+- `isBusinessDay(date)`/`countBusinessDays(startDate, endDate)`を`getHolidayName`の直後に追加。
+  既存のヘッダーの土日祝色分け(`isSundayOrHoliday`/`isSaturday`)は表示色の分岐が異なる(土曜/日祝を別色にする)
+  ため、リファクタリングはせずそのまま残した
+- バーのラベルを「作業名（n日）」形式に変更。`entry.hasChildren`が真の親項目は従来通り`.gantt-bar`内に表示し、
+  偽の子項目(leaf)は`.gantt-bar`を`.is-leaf`(薄く細いバー、top:15px/height:9px)にして、
+  同じ`.gantt-row`内の上部に新規`.gantt-bar-label`要素でラベルを表示する(行の高さ28pxは変更せず、
+  バーとラベルを行の中で上下に分けて配置した)
+- 描画後、`.gantt-bar`/`.gantt-bar-label`を`scrollWidth > clientWidth`で判定し、収まらない場合は
+  `textContent = ""`でラベルを消す処理を追加した
+- 検証は5-Eと同様、`isBusinessDay`/`countBusinessDays`等の対象関数と関連CSSをindex.htmlから
+  そのまま抽出したテストページで、祝日をまたぐ期間・1日のみ・狭い列幅での表示をスクリーンショット確認した
+  (2026-01-05〜01-12の実営業日数が祝日「成人の日」(1/12)を除いて5日になることを確認済み)
 
 ### 5-G: スケジュール表の親行配色
 - `buildVisibleScheduleList`が返すオブジェクトに`groupIndex`(トップレベル項目の並び順インデックス)を追加する

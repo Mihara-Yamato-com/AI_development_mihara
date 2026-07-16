@@ -298,6 +298,24 @@ body {
   box-sizing: border-box;
 }
 
+.gantt-bar.is-leaf {
+  top: 15px;
+  height: 9px;
+  padding: 0;
+}
+
+.gantt-bar-label {
+  position: absolute;
+  top: 1px;
+  height: 13px;
+  line-height: 13px;
+  font-size: 11px;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .today-line {
   position: absolute;
   top: 0;
@@ -4468,6 +4486,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   /**
+   * 指定日が営業日(土日・祝日を除く)かどうか判定する
+   * @param {Date} date
+   * @returns {boolean}
+   */
+  function isBusinessDay(date) {
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+    return getHolidayName(date) === null;
+  }
+
+  /**
+   * 開始日〜終了日(両端含む)の実営業日数を数える
+   * @param {Date} startDate
+   * @param {Date} endDate
+   * @returns {number}
+   */
+  function countBusinessDays(startDate, endDate) {
+    let count = 0;
+    const cursor = new Date(startDate);
+    while (cursor.getTime() <= endDate.getTime()) {
+      if (isBusinessDay(cursor)) count++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return count;
+  }
+
+  /**
    * 現在の表示単位(currentPeriod)に応じて、そのヘッダーセルにラベルを表示するか判定する
    * @param {Date} cellDate
    * @param {number} index - 表示範囲の先頭からの日数(0始まり)
@@ -4626,11 +4671,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const itemEnd = parseDateStr(item.endDate);
         const left = diffInDays(rangeStart, itemStart) * dayWidthPx;
         const width = (diffInDays(itemStart, itemEnd) + 1) * dayWidthPx;
+        const barStyle = "left:" + left + "px; width:" + width + "px";
+        const label = escapeHtml(item.title) + "（" + countBusinessDays(itemStart, itemEnd) + "日）";
+
+        if (entry.hasChildren) {
+          return (
+            "<div class=\"gantt-row\" style=\"width:" + totalWidth + "px\">" +
+            "<div class=\"gantt-bar\" style=\"" + barStyle + "\">" + label + "</div>" +
+            "</div>"
+          );
+        }
         return (
           "<div class=\"gantt-row\" style=\"width:" + totalWidth + "px\">" +
-          "<div class=\"gantt-bar\" style=\"left:" + left + "px; width:" + width + "px\">" +
-          escapeHtml(item.title) +
-          "</div>" +
+          "<div class=\"gantt-bar is-leaf\" style=\"" + barStyle + "\"></div>" +
+          "<div class=\"gantt-bar-label\" style=\"" + barStyle + "\">" + label + "</div>" +
           "</div>"
         );
       })
@@ -4666,6 +4720,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       todayLine +
       milestoneMarkers +
       "</div>";
+
+    container.querySelectorAll(".gantt-bar, .gantt-bar-label").forEach((el) => {
+      if (el.scrollWidth > el.clientWidth) {
+        el.textContent = "";
+      }
+    });
   }
 
   /**
