@@ -1554,6 +1554,21 @@ button:disabled {
   </div>
 </div>
 
+<div id="confirm-modal" class="modal-overlay" hidden>
+  <div class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="modal-header">
+      <svg class="btn-icon"><use href="#icon-trash"></use></svg>
+      <h2 id="confirm-modal-title">確認</h2>
+      <button id="btn-close-confirm-modal-header" class="btn btn-icon-only" aria-label="閉じる"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg></button>
+    </div>
+    <div id="confirm-modal-message"></div>
+    <div class="modal-actions">
+      <button id="btn-cancel-confirm-modal" class="btn"><svg class="btn-icon"><use href="#icon-x-mark"></use></svg><span class="btn-label">キャンセル</span></button>
+      <button id="btn-confirm-confirm-modal" class="btn btn-outline-red"><svg class="btn-icon"><use href="#icon-trash"></use></svg><span class="btn-label">削除</span></button>
+    </div>
+  </div>
+</div>
+
 <aside id="comment-panel" class="side-panel" hidden>
   <div class="side-panel-header">
     <h2><svg class="btn-icon"><use href="#icon-chat-bubble"></use></svg>コメント</h2>
@@ -3241,6 +3256,49 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
   }
 
+  let confirmDialogResolve = null;
+
+  /**
+   * 確認ダイアログを閉じ、待機中のPromiseをresultで解決する
+   * @param {boolean} result
+   */
+  function closeConfirmDialog(result) {
+    document.getElementById("confirm-modal").hidden = true;
+    if (confirmDialogResolve) {
+      const resolve = confirmDialogResolve;
+      confirmDialogResolve = null;
+      resolve(result);
+    }
+  }
+
+  /**
+   * 共通の確認ダイアログを表示し、ユーザーの選択をPromise<boolean>で返す(window.confirmの置き換え)
+   * @param {string} messageHtml - 確認内容(呼び出し側で動的な部分をescapeHtml済みにしておくこと)
+   * @param {Object} [options]
+   * @param {string} [options.confirmLabel] - 実行ボタンのラベル(既定: "削除")
+   * @param {string} [options.confirmIcon] - 実行ボタンのアイコンid(既定: "icon-trash")
+   * @param {boolean} [options.danger] - 実行ボタンを赤系にするか(既定: true)
+   * @returns {Promise<boolean>}
+   */
+  function showConfirmDialog(messageHtml, options) {
+    const opts = options || {};
+    const confirmLabel = opts.confirmLabel || "削除";
+    const confirmIcon = opts.confirmIcon || "icon-trash";
+    const danger = opts.danger !== false;
+
+    document.getElementById("confirm-modal-message").innerHTML = messageHtml;
+    const confirmBtn = document.getElementById("btn-confirm-confirm-modal");
+    confirmBtn.querySelector(".btn-label").textContent = confirmLabel;
+    confirmBtn.querySelector("use").setAttribute("href", "#" + confirmIcon);
+    confirmBtn.classList.toggle("btn-outline-red", danger);
+
+    openOverlay("confirm-modal");
+
+    return new Promise((resolve) => {
+      confirmDialogResolve = resolve;
+    });
+  }
+
   /**
    * 画面幅が不足した際に非表示にする、表示単位・表示列の優先順位(先頭から隠す)
    * 「日」「開始」は含めず常に表示を維持する
@@ -3912,7 +3970,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       window.alert("プロジェクトがロックされているため復元できません");
       return;
     }
-    const ok = window.confirm("この状態に復元しますか？現在のプロジェクトデータは上書きされます。");
+    const snapshots = await getSnapshotsByProject(currentProjectId);
+    const snapshot = snapshots.find((s) => s.id === snapshotId);
+    const snapshotLabel = snapshot ? escapeHtml(formatTimestamp(snapshot.createdAt)) + "時点のスナップショット" : "このスナップショット";
+    const ok = await showConfirmDialog(
+      "「" + snapshotLabel + "」の状態に復元しますか？<br>現在のプロジェクトデータは上書きされ、元に戻せません。",
+      { confirmLabel: "復元", confirmIcon: "icon-arrow-path", danger: false }
+    );
     if (!ok) return;
     await restoreSnapshotById(snapshotId);
     await refreshProjectSelect();
@@ -3931,7 +3995,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       window.alert("プロジェクトがロックされているため削除できません");
       return;
     }
-    const ok = window.confirm("このスナップショットを削除しますか？");
+    const snapshots = await getSnapshotsByProject(currentProjectId);
+    const snapshot = snapshots.find((s) => s.id === snapshotId);
+    const snapshotLabel = snapshot ? escapeHtml(formatTimestamp(snapshot.createdAt)) + "時点のスナップショット" : "このスナップショット";
+    const ok = await showConfirmDialog("「" + snapshotLabel + "」を削除しますか？<br>この操作は元に戻せません。");
     if (!ok) return;
     await deleteSnapshot(snapshotId);
     await renderSnapshotList();
@@ -4121,7 +4188,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       window.alert("ルートノードは削除できません");
       return;
     }
-    const ok = window.confirm("このノードを削除しますか？（子ノードも全て削除されます）");
+    const ok = await showConfirmDialog(
+      "「" + escapeHtml(node.text) + "」を削除しますか？<br>このノードの子ノードも全て削除されます。"
+    );
     if (!ok) return;
     await deleteMindMapNodeCascade(nodeId);
     selectedMindMapNodeId = null;
@@ -5100,6 +5169,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     bindModalDismissal("milestone-modal", closeMilestoneModal);
     bindModalDismissal("schedule-edit-modal", closeScheduleEditModal);
     bindModalDismissal("task-edit-modal", closeTaskEditModal);
+    bindModalDismissal("confirm-modal", () => closeConfirmDialog(false));
+
+    document.getElementById("btn-close-confirm-modal-header").addEventListener("click", () => {
+      closeConfirmDialog(false);
+    });
+    document.getElementById("btn-cancel-confirm-modal").addEventListener("click", () => {
+      closeConfirmDialog(false);
+    });
+    document.getElementById("btn-confirm-confirm-modal").addEventListener("click", () => {
+      closeConfirmDialog(true);
+    });
 
     bindPanelDismissal("history-panel", closeHistoryPanel);
     bindPanelDismissal("memo-panel", closeMemoPanel);
@@ -5179,7 +5259,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     document.getElementById("btn-delete-project").addEventListener("click", async () => {
       if (currentProjectId === null || currentProjectLocked) return;
-      const ok = window.confirm("選択中のプロジェクトを削除しますか？");
+      const project = await getProjectById(currentProjectId);
+      const ok = await showConfirmDialog(
+        "「" + escapeHtml(project.name) + "」を削除しますか？<br>（すべてのタスクも削除されます）"
+      );
       if (!ok) return;
       await deleteProject(currentProjectId);
       currentProjectId = null;
@@ -5290,9 +5373,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (currentProjectLocked) return;
 
       if (button.classList.contains("btn-row-delete")) {
-        const ok = window.confirm("このスケジュール項目を削除しますか？");
-        if (!ok) return;
         const item = await getScheduleItemById(itemId);
+        const ok = await showConfirmDialog("「" + escapeHtml(item.title) + "」を削除しますか？");
+        if (!ok) return;
         await deleteScheduleItem(itemId);
         await renderMainArea();
         await addChangeLog(currentProjectId, "作業「" + item.title + "」を削除しました");
@@ -5407,10 +5490,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const deleteButton = event.target.closest(".btn-delete-memo");
       if (deleteButton) {
         if (currentProjectLocked) return;
-        const ok = window.confirm("このメモを削除しますか？");
-        if (!ok) return;
         const id = Number(deleteButton.dataset.memoId);
         const memo = await getMemoById(id);
+        const ok = await showConfirmDialog("「" + escapeHtml(memo.title || "無題のメモ") + "」を削除しますか？");
+        if (!ok) return;
         await deleteMemo(id);
         if (currentMemoId === id) {
           currentMemoId = null;
@@ -5486,9 +5569,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const deleteButton = event.target.closest(".btn-delete-quick-memo");
       if (!deleteButton) return;
       if (currentProjectLocked) return;
-      const ok = window.confirm("この即時メモを削除しますか？");
+      const quickMemoId = Number(deleteButton.dataset.quickMemoId);
+      const quickMemos = await getQuickMemosByProject(currentProjectId);
+      const quickMemo = quickMemos.find((m) => m.id === quickMemoId);
+      const preview = quickMemo ? escapeHtml(quickMemo.text.slice(0, 20)) + (quickMemo.text.length > 20 ? "…" : "") : "この即時メモ";
+      const ok = await showConfirmDialog("「" + preview + "」を削除しますか？");
       if (!ok) return;
-      await deleteQuickMemo(Number(deleteButton.dataset.quickMemoId));
+      await deleteQuickMemo(quickMemoId);
       await renderQuickMemoList();
       await addChangeLog(currentProjectId, "即時メモを削除しました");
     });
@@ -5576,7 +5663,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
 
     document.getElementById("btn-delete-task").addEventListener("click", async () => {
-      const ok = window.confirm("このタスクを削除しますか？");
+      const taskTitle = document.getElementById("task-edit-title").value;
+      const ok = await showConfirmDialog("「" + escapeHtml(taskTitle) + "」を削除しますか？");
       if (!ok) return;
       const task = await getTaskById(editingTaskId);
       await deleteTask(editingTaskId);
