@@ -1705,10 +1705,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   const STATUS_OPTIONS = [STATUS_NOT_STARTED, STATUS_IN_PROGRESS, STATUS_DONE];
 
   const PERIOD_DAY_WIDTH_PX = {
-    day: 24,
-    week: 10,
-    month: 5,
-    quarter: 3,
+    day: 36,
+    week: 14,
+    month: 3,
+    quarter: 2,
   };
 
   const SCHEDULE_PARENT_ROW_COLORS = ["#eff6ff", "#dbeafe", "#e0e7ff", "#ecfeff", "#f0f9ff"];
@@ -4673,14 +4673,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   /**
-   * 3か月表示のヘッダー下段に使う、四半期初のみのラベルを作る（例: Q1(1-3月)）
+   * 3か月表示のヘッダー下段に使う、四半期初のみのラベルを作る（例: Q1（01〜03月））
    * @param {Date} date
    * @returns {string}
    */
   function formatQuarterLabel(date) {
     const quarter = getQuarterIndex(date);
     const startMonth = (quarter - 1) * 3 + 1;
-    return "Q" + quarter + "(" + startMonth + "-" + (startMonth + 2) + "月)";
+    const endMonth = startMonth + 2;
+    return "Q" + quarter + "（" + String(startMonth).padStart(2, "0") + "〜" + String(endMonth).padStart(2, "0") + "月）";
   }
 
   /**
@@ -5019,8 +5020,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const label = escapeHtml(item.title) + "（" + countBusinessDays(itemStart, itemEnd) + "日）";
 
         if (entry.hasChildren) {
+          const rowStyle = "width:" + totalWidth + "px; background:" + SCHEDULE_PARENT_ROW_COLORS[entry.groupIndex % SCHEDULE_PARENT_ROW_COLORS.length];
           return (
-            "<div class=\"gantt-row\" style=\"width:" + totalWidth + "px\">" +
+            "<div class=\"gantt-row is-parent\" style=\"" + rowStyle + "\">" +
             "<div class=\"gantt-bar\" style=\"" + barStyle + "\">" + label + "</div>" +
             "</div>"
           );
