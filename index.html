@@ -276,7 +276,9 @@ body {
 }
 
 .schedule-table thead th {
-  height: 20px;
+  height: 40px;
+  font-weight: 700;
+  color: var(--text1);
 }
 
 .toggle-arrow {
@@ -291,9 +293,25 @@ body {
   width: 14px;
 }
 
+.schedule-item-number {
+  display: inline-block;
+  min-width: 28px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.schedule-item-title.is-parent {
+  font-weight: 700;
+  color: var(--navy);
+}
+
 .schedule-table .status-select {
   font-size: 12px;
-  padding: 2px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
 }
 
 .schedule-table .row-actions {
@@ -3394,6 +3412,28 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return result;
   }
 
+  /**
+   * スケジュール項目の表示番号(親=整数、子=親番号に連番を付けた小数形式)を、
+   * id -> 番号文字列 のMapとして作る
+   * @param {Map<number|null, Array<Object>>} siblingsByParentId - 親id(トップレベルはnull) -> 兄弟項目配列
+   * @returns {Map<number, string>}
+   */
+  function buildScheduleItemNumbers(siblingsByParentId) {
+    const numbers = new Map();
+
+    function assignNumbers(parentId, parentNumber) {
+      const siblings = siblingsByParentId.get(parentId) || [];
+      siblings.forEach((item, index) => {
+        const number = parentNumber ? parentNumber + "." + (index + 1) : String(index + 1);
+        numbers.set(item.id, number);
+        assignNumbers(item.id, number);
+      });
+    }
+
+    assignNumbers(null, "");
+    return numbers;
+  }
+
   /* ---- Sub-section: Schedule Add Modal ---- */
 
   /**
@@ -4451,6 +4491,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   /* ---- Sub-section: Schedule Table ---- */
 
   /**
+   * 状態に応じたバッジ配色のinline style文字列を返す(未着手:グレー/進行中:黄色/完了:緑)
+   * @param {string} status
+   * @returns {string}
+   */
+  function getStatusBadgeStyle(status) {
+    if (status === STATUS_DONE) {
+      return "background:var(--success-soft);color:var(--success);";
+    }
+    if (status === STATUS_IN_PROGRESS) {
+      return "background:var(--warning-soft);color:var(--warning);";
+    }
+    return "background:var(--surface-unselected);color:var(--status-not-started);";
+  }
+
+  /**
    * 選択中プロジェクトのスケジュール表を描画し直す
    * @returns {Promise<void>}
    */
@@ -4480,8 +4535,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       siblingsByParentId.get(key).push(i);
     });
 
+    const itemNumbers = buildScheduleItemNumbers(siblingsByParentId);
+
     const headerCells =
-      "<th>作業内容</th>" +
+      "<th>スケジュール</th>" +
       (visibleColumns.startDate ? "<th>開始</th>" : "") +
       (visibleColumns.endDate ? "<th>終了</th>" : "") +
       (visibleColumns.status ? "<th>状態</th>" : "") +
@@ -4513,14 +4570,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const startCell = visibleColumns.startDate ? "<td>" + escapeHtml(item.startDate) + "</td>" : "";
         const endCell = visibleColumns.endDate ? "<td>" + escapeHtml(item.endDate) + "</td>" : "";
         const statusCell = visibleColumns.status
-          ? "<td><select class=\"status-select\" data-item-id=\"" + item.id + "\"" + disabledAttr + ">" + statusOptionsHtml(item) + "</select></td>"
+          ? "<td><select class=\"status-select\" data-item-id=\"" + item.id + "\" style=\"" + getStatusBadgeStyle(item.status) + "\"" + disabledAttr + ">" + statusOptionsHtml(item) + "</select></td>"
           : "";
         const rowStyleAttr = entry.hasChildren
           ? " style=\"background:" + SCHEDULE_PARENT_ROW_COLORS[entry.groupIndex % SCHEDULE_PARENT_ROW_COLORS.length] + "\""
           : "";
+        const titleClass = "schedule-item-title" + (entry.hasChildren ? " is-parent" : "");
         return (
           "<tr class=\"schedule-row\" data-item-id=\"" + item.id + "\"" + rowStyleAttr + ">" +
-          "<td style=\"padding-left:" + indentPx + "px\">" + toggle + escapeHtml(item.title) + "</td>" +
+          "<td style=\"padding-left:" + indentPx + "px\">" + toggle +
+          "<span class=\"schedule-item-number\">" + escapeHtml(itemNumbers.get(item.id) || "") + "</span>" +
+          "<span class=\"" + titleClass + "\">" + escapeHtml(item.title) + "</span>" +
+          "</td>" +
           startCell + endCell + statusCell +
           "<td class=\"row-actions\">" +
           "<button class=\"btn btn-row-edit\" data-item-id=\"" + item.id + "\" title=\"編集\"><svg class=\"btn-icon\"><use href=\"#icon-pencil-square\"></use></svg></button>" +
