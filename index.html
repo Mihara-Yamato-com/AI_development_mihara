@@ -219,8 +219,29 @@ body {
 
 .gantt-header {
   display: flex;
-  height: 20px;
+  flex-direction: column;
   border-bottom: 1px solid #d1d5db;
+}
+
+.gantt-header-top,
+.gantt-header-bottom {
+  display: flex;
+  height: 20px;
+}
+
+.gantt-header-top {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.gantt-header-band {
+  flex: 0 0 auto;
+  font-size: 11px;
+  text-align: center;
+  border-right: 1px solid #e5e7eb;
+  padding: 2px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .gantt-header-cell {
@@ -4272,6 +4293,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   /**
+   * 1か月表示のヘッダー下段に使う、月初のみのラベルを作る（例: 7月）
+   * @param {Date} date
+   * @returns {string}
+   */
+  function formatMonthLabel(date) {
+    return (date.getMonth() + 1) + "月";
+  }
+
+  /**
+   * 日付が属する四半期番号を返す(暦年基準: Q1=1-3月, Q2=4-6月, Q3=7-9月, Q4=10-12月)
+   * @param {Date} date
+   * @returns {number} 1-4
+   */
+  function getQuarterIndex(date) {
+    return Math.floor(date.getMonth() / 3) + 1;
+  }
+
+  /**
+   * 3か月表示のヘッダー下段に使う、四半期初のみのラベルを作る（例: Q1(1-3月)）
+   * @param {Date} date
+   * @returns {string}
+   */
+  function formatQuarterLabel(date) {
+    const quarter = getQuarterIndex(date);
+    const startMonth = (quarter - 1) * 3 + 1;
+    return "Q" + quarter + "(" + startMonth + "-" + (startMonth + 2) + "月)";
+  }
+
+  /**
    * 今日の0時のDateを返す
    * @returns {Date}
    */
@@ -4430,8 +4480,66 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (currentPeriod === "week") {
       return index === 0 || cellDate.getDay() === 1; // 月曜日
     }
-    // month / quarter
-    return index === 0 || cellDate.getDate() === 1;
+    if (currentPeriod === "month") {
+      return index === 0 || cellDate.getDate() === 1; // 月初
+    }
+    // quarter: 四半期初(1/4/7/10月の1日)のみ
+    return index === 0 || (cellDate.getDate() === 1 && cellDate.getMonth() % 3 === 0);
+  }
+
+  /**
+   * 現在の表示単位(currentPeriod)に応じたヘッダー下段の日付ラベル文字列を作る
+   * @param {Date} cellDate
+   * @returns {string}
+   */
+  function formatHeaderBottomLabel(cellDate) {
+    if (currentPeriod === "month") {
+      return formatMonthLabel(cellDate);
+    }
+    if (currentPeriod === "quarter") {
+      return formatQuarterLabel(cellDate);
+    }
+    // day / week
+    return formatDateLabel(cellDate);
+  }
+
+  /**
+   * ガントヘッダー上段に表示する期間バンド(YYYY年MM月 / YYYY年Qn / YYYY年)を、
+   * 月/四半期/年の切り替わり位置で連続する日をグループ化して作る
+   * @param {Date} rangeStart
+   * @param {number} totalDays
+   * @param {number} dayWidthPx
+   * @returns {{widthPx: number, label: string}[]}
+   */
+  function buildGanttHeaderBands(rangeStart, totalDays, dayWidthPx) {
+    const bands = [];
+    let currentKey = null;
+
+    for (let i = 0; i < totalDays; i++) {
+      const cellDate = new Date(rangeStart);
+      cellDate.setDate(cellDate.getDate() + i);
+
+      let key;
+      let label;
+      if (currentPeriod === "quarter") {
+        key = String(cellDate.getFullYear());
+        label = cellDate.getFullYear() + "年";
+      } else if (currentPeriod === "month") {
+        key = cellDate.getFullYear() + "-Q" + getQuarterIndex(cellDate);
+        label = cellDate.getFullYear() + "年Q" + getQuarterIndex(cellDate);
+      } else {
+        key = cellDate.getFullYear() + "-" + cellDate.getMonth();
+        label = cellDate.getFullYear() + "年" + String(cellDate.getMonth() + 1).padStart(2, "0") + "月";
+      }
+
+      if (key === currentKey) {
+        bands[bands.length - 1].widthPx += dayWidthPx;
+      } else {
+        bands.push({ widthPx: dayWidthPx, label: label });
+        currentKey = key;
+      }
+    }
+    return bands;
   }
 
   /**
@@ -4467,7 +4575,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const rangeEnd = new Date(Math.max.apply(null, endDates.concat([today, twoYearsAhead]).concat(milestoneDates)));
     const totalDays = diffInDays(rangeStart, rangeEnd) + 1;
     const totalWidth = totalDays * dayWidthPx;
-    const headerHeightPx = 20;
+    const headerHeightPx = 40;
     const rowHeightPx = 28;
 
     const visibleList = buildVisibleScheduleList(items);
@@ -4495,7 +4603,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       headerCells.push(
         "<div class=\"gantt-header-cell" + headerCellClass + "\" style=\"width:" + dayWidthPx + "px\"" + titleAttr + ">" +
-        (showLabel ? formatDateLabel(cellDate) : "") +
+        (showLabel ? formatHeaderBottomLabel(cellDate) : "") +
         "</div>"
       );
       if (showLabel) {
@@ -4542,9 +4650,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       })
       .join("");
 
+    const headerBandCells = buildGanttHeaderBands(rangeStart, totalDays, dayWidthPx)
+      .map((band) => "<div class=\"gantt-header-band\" style=\"width:" + band.widthPx + "px\">" + escapeHtml(band.label) + "</div>")
+      .join("");
+
     container.innerHTML =
       "<div class=\"gantt-scroll\">" +
-      "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" + headerCells.join("") + "</div>" +
+      "<div class=\"gantt-header\" style=\"width:" + totalWidth + "px\">" +
+      "<div class=\"gantt-header-top\">" + headerBandCells + "</div>" +
+      "<div class=\"gantt-header-bottom\">" + headerCells.join("") + "</div>" +
+      "</div>" +
       dayBackgrounds.join("") +
       gridLines.join("") +
       rows +
